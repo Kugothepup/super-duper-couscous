@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./studies/*/sealed/**)",
+      "Edit(./studies/*/sealed/**)",
+      "Read(./.secrets/**)",
+      "Edit(./.secrets/**)",
+      "Bash(cat studies/*/sealed/*)",
+      "Bash(cat .secrets/*)"
+    ],
+    "allow": [
+      "Bash(python -m crp:*)",
+      "Bash(pytest:*)"
+    ]
+  }
+}
