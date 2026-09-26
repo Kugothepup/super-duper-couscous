@@ -41,7 +41,7 @@ You ── /community-research ──▶ Skill (SKILL.md)
 
 3. **Copy this pack in.** Put `CLAUDE.md`, `BUILD_PLAN.md`, `README.md` and the `.claude/` folder at the top level. Rename `gitignore.txt` to `.gitignore`. Folders starting with a dot are hidden by default: press Cmd+Shift+. in Finder, or turn on "Hidden items" in Windows File Explorer, to see `.claude/`.
 
-4. **Copy your existing skill in** at `.claude/skills/community-research/SKILL.md`, along with any files that sit beside it (templates, reference files, the dashboard HTML, demo data). If your skill has a different name, use that name for the folder. Claude Code turns the folder name into the slash command. Put the synthetic demo dataset in `tests/fixtures/demo/` if you have it as files.
+4. **Copy your existing skill in** at `.claude/skills/community-research/SKILL.md`, along with any files that sit beside it (templates, reference files, the dashboard HTML, demo data). If your skill has a different name, use that name for the folder. Claude Code turns the folder name into the slash command. Keep the synthetic demo study out of the project: it's for showcasing only, and tests use their own fixtures.
 
 5. **Commit the starting point** so you can always see what changed:
    ```

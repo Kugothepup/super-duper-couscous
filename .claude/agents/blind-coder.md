@@ -22,7 +22,7 @@ Read only the batch file. Don't open, list or search any other file or folder. Y
 - Apply the codebook exactly as written. Use only the categories it defines. Don't invent new ones, merge them or rename them.
 - Code what the text **says**, not what the writer probably meant or what would make an interesting finding.
 - Code `parent_text` for context only. Never label the parent.
-- Keep tone and stance separate if the codebook has both. An angry post can support something, and a calm post can oppose it.
+- Keep sentiment and stance separate if the codebook has both. Sentiment is the writer's evaluation of the subject, not their mood. Stance is their position on the proposition. A post can be negative about the subject and still support the proposition.
 - For evidence grade, use the codebook's definitions. The order runs from observed, to specific incident, habit, opinion and hypothetical. Choose the highest grade the text itself supports, and if you're torn between two, choose the lower one.
 - If a text is ambiguous, off-topic or unreadable, use the codebook's `unclear` or `not_applicable` value. Don't guess.
 - Every item gets exactly one output line, in the order given.

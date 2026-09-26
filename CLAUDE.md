@@ -19,7 +19,7 @@ A research tool that turns forum posts, screenshots and interview transcripts in
 
 ## Method changes need Steeve
 
-Port the existing skill's method faithfully. That covers the driver metric, sentiment unit, evidence grades, aspect lists and thresholds. If something looks wrong, or the build plan and the skill disagree, **write it in `DECISIONS.md` and ask**. Don't silently change it.
+Port the existing skill's method faithfully. That covers the driver metric, sentiment unit, evidence grades, aspect lists and thresholds. If something looks wrong, or the build plan and the skill disagree, **write it in `DECISIONS.md` and ask**. Don't silently change it. Read `DECISIONS.md` before each phase: where it and `BUILD_PLAN.md` differ, `DECISIONS.md` wins.
 
 Current thresholds (from the skill, keep unless told otherwise):
 - Fewer than 20 distinct people: no probabilities or ranges; counts only.
