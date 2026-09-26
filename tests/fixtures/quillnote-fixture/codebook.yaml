@@ -1,0 +1,94 @@
+version: '1'
+study_type: product
+aspects:
+- pricing
+- search
+- sync
+- templates
+- offline
+- backlinks
+aspect_definitions:
+  pricing: what it costs, plans and discounts
+  search: finding notes by searching
+  sync: keeping notes the same across devices
+variables:
+- name: overall
+  description: The writer's evaluation of Quillnote, not their mood (D13)
+  applies_to: measurement
+  kind: single
+  level: ordinal
+  values:
+  - -2
+  - -1
+  - 0
+  - 1
+  - 2
+  definitions:
+    -2: 'strongly negative: strong language, lost work, cancelled or switched'
+    -1: 'negative: a plain complaint'
+    0: neutral, mixed, unclear or off-topic
+    1: positive
+    2: 'strongly positive: strong language or a clear benefit'
+- name: aspect_scores
+  description: Each aspect the comment evaluates, with its own score
+  applies_to: measurement
+  kind: per_aspect
+  level: ordinal
+  values:
+  - -2
+  - -1
+  - 0
+  - 1
+  - 2
+- name: jtbd_force
+  description: Force of progress (Moesta & Spiek)
+  applies_to: detail
+  level: nominal
+  values:
+  - push
+  - pull
+  - anxiety
+  - habit
+  - none
+- name: evidence_type
+  description: Evidence grade, weakest to strongest
+  applies_to: detail
+  level: ordinal
+  values:
+  - hypothetical
+  - opinion
+  - habitual
+  - specific_incident
+  - observed
+- name: friction
+  description: Hit an obstacle, workaround, error or unmet need
+  applies_to: detail
+  level: nominal
+  values:
+  - true
+  - false
+- name: severity
+  description: How bad the friction was
+  applies_to: detail
+  level: ordinal
+  values:
+  - 1
+  - 2
+  - 3
+  required_when: friction
+  definitions:
+    1: minor
+    2: 'moderate: workaround, lost time or real frustration'
+    3: 'severe: blocked, lost data, or drove switching'
+- name: aspect
+  description: The one aspect the nugget is mainly about
+  applies_to: detail
+  level: nominal
+  values:
+  - pricing
+  - search
+  - sync
+  - templates
+  - offline
+  - backlinks
+  - not_applicable

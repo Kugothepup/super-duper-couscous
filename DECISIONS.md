@@ -30,3 +30,9 @@ Steeve's answers to the questions in `INVENTORY.md`. Q1–Q9 follow the recommen
 | D15 | Q9 Collection log | Columns: source, search_term, date, reason, neutral (y/n), results_seen, kept, why_excluded | Keeps the skill's record of what each search yielded, plus the plan's neutral flag |
 | D16 | Q10 Demo study | No demo study in the core: not in `crp/`, not in `tests/`, not required by any phase check. Tests use small synthetic fixtures built for the tests. The Notion demo can live outside the core as a showcase | Steeve: "can use it to showcase, but it shouldn't exist in the core" |
 | D17 | Q11 Interview anonymising | Interview speaker names get the same salted-HMAC person codes as forum authors (was: names kept as-is) | Interview transcripts are personal data too |
+
+## Decided while building
+
+| # | Phase | Decision | Why |
+|---|---|---|---|
+| D18 | 1 | `Post` keeps the plan's fields and adds the skill's turn fields the port needs: `role` (participant or interviewer), `kind` (post, comment or turn), `score` and `date_approx`. `capture_method` adds `export` for Reddit exports. `scikit-learn` is a pinned dependency | Follows from D7: the ported parsers, triage and clustering use these |

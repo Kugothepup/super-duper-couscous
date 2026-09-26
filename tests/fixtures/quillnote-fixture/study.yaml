@@ -1,0 +1,17 @@
+id: quillnote-fixture
+subject: Quillnote (fictional, for tests)
+type: product
+questions:
+- Why do people stay with Quillnote or leave it?
+- What gets in the way of finding and keeping notes?
+stance_target: null
+event_date: '2026-06-09'
+window_start: '2026-04-01'
+window_end: '2026-08-31'
+sources:
+- Quillnote community forum
+- reddit.com/r/notetaking
+population: People posting about Quillnote in its forum and r/notetaking, plus one
+  interview
+owner: Steeve
+created: '2026-09-26'
