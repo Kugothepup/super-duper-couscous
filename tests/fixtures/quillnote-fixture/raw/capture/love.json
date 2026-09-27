@@ -1,0 +1,73 @@
+{
+  "source_file": "love.png",
+  "site": "Quillnote community forum",
+  "url": null,
+  "captured": "2026-09-20",
+  "thread_title": "What do you love about Quillnote?",
+  "search_query": "what do you love",
+  "posts": [
+    {
+      "id": "p01",
+      "author": "pb_writes",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 10,
+      "text": "What do you love about Quillnote? Trying to decide whether to renew and would like to hear the good side for once."
+    },
+    {
+      "id": "p02",
+      "author": "night_owl_notes",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 6,
+      "text": "The templates. I built a literature review template years ago and still use it daily."
+    },
+    {
+      "id": "p03",
+      "author": "maria_k",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 9,
+      "text": "Backlinks changed how I write. I find old ideas I had forgotten about."
+    },
+    {
+      "id": "p04",
+      "author": "lena.v",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 4,
+      "text": "The daily note is the only habit that has ever stuck for me."
+    },
+    {
+      "id": "p05",
+      "author": "gardenofnotes",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 3,
+      "text": "Clean design, no clutter, and the mobile app is quick when sync behaves."
+    },
+    {
+      "id": "p06",
+      "author": "night_owl_notes",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": "p02",
+      "score": 2,
+      "text": "Also the export to PDF is the best of any notes app I have tried."
+    },
+    {
+      "id": "p07",
+      "author": "tomasz_r",
+      "date": "2026-07-20",
+      "date_approx": true,
+      "parent": null,
+      "score": 5,
+      "text": "Even after we cancelled I kept a personal plan just for the templates."
+    }
+  ]
+}

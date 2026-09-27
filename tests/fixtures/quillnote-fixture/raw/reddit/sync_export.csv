@@ -1,0 +1,43 @@
+id,parent_id,link_id,author,body,title,score,created_utc,subreddit
+q3sync,,q3sync,sam_h,Is anyone else losing edits between devices? I have reinstalled twice and it keeps happening.,Sync broke after the 4.2 update,88,1781082000,notetaking
+k01,t3_q3sync,t3_q3sync,sync_user_01,"Since the 4.2 update my phone and laptop show different versions of the same note, and support hasn't replied to my ticket yet.",,0,1781082300,notetaking
+k02,t3_q3sync,t3_q3sync,sync_user_02,"Since the 4.2 update edits I made on the train vanished when I got home, and support hasn't replied to my ticket yet.",,5,1781082600,notetaking
+k03,t3_q3sync,t3_q3sync,sync_user_03,"Since the 4.2 update the sync spinner never stops and nothing uploads, and support hasn't replied to my ticket yet.",,10,1781082900,notetaking
+k04,t3_q3sync,t3_q3sync,sync_user_04,"Since the 4.2 update shared notebooks show duplicate pages for everyone on the team, and support hasn't replied to my ticket yet.",,2,1781083200,notetaking
+k05,t3_q3sync,t3_q3sync,sync_user_05,"Since the 4.2 update images attached to notes come back blank on the desktop app, and support hasn't replied to my ticket yet.",,7,1781083500,notetaking
+k06,t3_q3sync,t3_q3sync,sync_user_06,"Since the 4.2 update the tablet app logs me out every time it tries to sync, and support hasn't replied to my ticket yet.",,12,1781083800,notetaking
+k07,t3_q3sync,t3_q3sync,sync_user_07,"Since the 4.2 update tags I added yesterday disappeared overnight, and support hasn't replied to my ticket yet.",,4,1781084100,notetaking
+k08,t3_q3sync,t3_q3sync,sync_user_08,"Since the 4.2 update a whole notebook reverted to how it looked last month, and support hasn't replied to my ticket yet.",,9,1781084400,notetaking
+k09,t3_q3sync,t3_q3sync,sync_user_09,"Since the 4.2 update notes created offline never appear on my other devices, and support hasn't replied to my ticket yet.",,1,1781084700,notetaking
+k10,t3_q3sync,t3_q3sync,sync_user_10,"Since the 4.2 update the web app shows a sync conflict on every single page, and support hasn't replied to my ticket yet.",,6,1781085000,notetaking
+k11,t3_q3sync,t3_q3sync,sync_user_11,"Since the 4.2 update my phone and laptop show different versions of the same note, so I have stopped trusting it for anything important.",,11,1781085300,notetaking
+k12,t3_q3sync,t3_q3sync,sync_user_12,"Since the 4.2 update edits I made on the train vanished when I got home, so I have stopped trusting it for anything important.",,3,1781085600,notetaking
+k13,t3_q3sync,t3_q3sync,night_owl_notes,"Since the 4.2 update my phone and laptop disagree about which notes exist, so I now export a backup every night before closing the app.",,10,1781085900,notetaking
+k14,t3_q3sync,t3_q3sync,sync_user_13,"Since the 4.2 update the sync spinner never stops and nothing uploads, so I have stopped trusting it for anything important.",,8,1781086200,notetaking
+k15,t3_q3sync,t3_q3sync,sync_user_14,"Since the 4.2 update shared notebooks show duplicate pages for everyone on the team, so I have stopped trusting it for anything important.",,0,1781086500,notetaking
+k16,t3_q3sync,t3_q3sync,sync_user_15,"Since the 4.2 update images attached to notes come back blank on the desktop app, so I have stopped trusting it for anything important.",,5,1781086800,notetaking
+k17,t3_q3sync,t3_q3sync,sync_user_16,"Since the 4.2 update the tablet app logs me out every time it tries to sync, so I have stopped trusting it for anything important.",,10,1781087100,notetaking
+k18,t3_q3sync,t3_q3sync,sync_user_17,"Since the 4.2 update tags I added yesterday disappeared overnight, so I have stopped trusting it for anything important.",,2,1781087400,notetaking
+k19,t3_q3sync,t3_q3sync,sync_user_18,"Since the 4.2 update a whole notebook reverted to how it looked last month, so I have stopped trusting it for anything important.",,7,1781087700,notetaking
+k20,t3_q3sync,t3_q3sync,sync_user_19,"Since the 4.2 update notes created offline never appear on my other devices, so I have stopped trusting it for anything important.",,12,1781088000,notetaking
+k21,t3_q3sync,t3_q3sync,sync_user_20,"Since the 4.2 update the web app shows a sync conflict on every single page, so I have stopped trusting it for anything important.",,4,1781088300,notetaking
+k22,t3_q3sync,t3_q3sync,sync_user_21,"Since the 4.2 update my phone and laptop show different versions of the same note, which cost me most of a morning to sort out.",,9,1781088600,notetaking
+k23,t3_q3sync,t3_q3sync,sync_user_22,"Since the 4.2 update edits I made on the train vanished when I got home, which cost me most of a morning to sort out.",,1,1781088900,notetaking
+k24,t3_q3sync,t3_q3sync,sync_user_23,"Since the 4.2 update the sync spinner never stops and nothing uploads, which cost me most of a morning to sort out.",,6,1781089200,notetaking
+k25,t3_q3sync,t3_q3sync,sync_user_24,"Since the 4.2 update shared notebooks show duplicate pages for everyone on the team, which cost me most of a morning to sort out.",,11,1781089500,notetaking
+k26,t3_q3sync,t3_q3sync,sync_user_25,"Since the 4.2 update images attached to notes come back blank on the desktop app, which cost me most of a morning to sort out.",,3,1781089800,notetaking
+k27,t3_q3sync,t3_q3sync,sync_user_26,"Since the 4.2 update the tablet app logs me out every time it tries to sync, which cost me most of a morning to sort out.",,8,1781090100,notetaking
+k28,t3_q3sync,t3_q3sync,sync_user_27,"Since the 4.2 update tags I added yesterday disappeared overnight, which cost me most of a morning to sort out.",,0,1781090400,notetaking
+k29,t3_q3sync,t3_q3sync,sync_user_28,"Since the 4.2 update a whole notebook reverted to how it looked last month, which cost me most of a morning to sort out.",,5,1781090700,notetaking
+k30,t3_q3sync,t3_q3sync,sync_user_29,"Since the 4.2 update notes created offline never appear on my other devices, which cost me most of a morning to sort out.",,10,1781091000,notetaking
+k31,t3_q3sync,t3_q3sync,night_owl_notes,"Following up: rolling back to 4.1 fixed sync for me, but I lost two days of edits made on the tablet.",,8,1781091300,notetaking
+k32,t3_q3sync,t3_q3sync,sync_user_30,"Since the 4.2 update the web app shows a sync conflict on every single page, which cost me most of a morning to sort out.",,2,1781091600,notetaking
+k33,t3_q3sync,t3_q3sync,sync_user_31,"Since the 4.2 update my phone and laptop show different versions of the same note, and rolling back to 4.1 is the only thing that helped.",,7,1781091900,notetaking
+k34,t3_q3sync,t3_q3sync,sync_user_32,"Since the 4.2 update edits I made on the train vanished when I got home, and rolling back to 4.1 is the only thing that helped.",,12,1781092200,notetaking
+k35,t3_q3sync,t3_q3sync,sync_user_33,"Since the 4.2 update the sync spinner never stops and nothing uploads, and rolling back to 4.1 is the only thing that helped.",,4,1781092500,notetaking
+k36,t3_q3sync,t3_q3sync,sync_user_34,"Since the 4.2 update shared notebooks show duplicate pages for everyone on the team, and rolling back to 4.1 is the only thing that helped.",,9,1781092800,notetaking
+k37,t3_q3sync,t3_q3sync,sync_user_35,"Since the 4.2 update images attached to notes come back blank on the desktop app, and rolling back to 4.1 is the only thing that helped.",,1,1781093100,notetaking
+k38,t3_q3sync,t3_q3sync,sync_user_36,"Since the 4.2 update the tablet app logs me out every time it tries to sync, and rolling back to 4.1 is the only thing that helped.",,6,1781093400,notetaking
+k39,t3_q3sync,t3_q3sync,sync_user_37,"Since the 4.2 update tags I added yesterday disappeared overnight, and rolling back to 4.1 is the only thing that helped.",,11,1781093700,notetaking
+k40,t3_q3sync,t3_q3sync,sync_user_38,"Since the 4.2 update a whole notebook reverted to how it looked last month, and rolling back to 4.1 is the only thing that helped.",,3,1781094000,notetaking
+k99,t3_q3sync,t3_q3sync,AutoModerator,Please search before posting.,,1,1781082060,notetaking

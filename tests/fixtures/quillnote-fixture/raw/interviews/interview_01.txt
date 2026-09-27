@@ -1,0 +1,8 @@
+Ana: Can you walk me through the last time you looked for an old note?
+Dev: Last Tuesday I needed a quote from a paper I read in spring. Search took ages, so I scrolled through the backlinks from the project page instead.
+Ana: What happened after that?
+Dev: I found it in about five minutes, but I had to know which project it belonged to. If I hadn't remembered that, I'd have given up.
+Ana: How do you feel about the price change?
+Dev: My department pays, so I don't notice it. I think I'd switch if I had to pay myself.
+Ana: Is there anything that would make you leave?
+Dev: If sync lost my work again. It happened once in June and I rewrote a whole section of a chapter.

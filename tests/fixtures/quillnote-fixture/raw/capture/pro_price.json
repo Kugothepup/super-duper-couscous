@@ -1,0 +1,100 @@
+{
+  "source_file": "pro_price.txt",
+  "site": "Quillnote community forum",
+  "url": null,
+  "captured": "2026-09-20",
+  "thread_title": "Is the new Pro price worth it?",
+  "search_query": "pro price",
+  "posts": [
+    {
+      "id": "p01",
+      "author": "maria_k",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 14,
+      "text": "Is the new Pro price worth it? It went from 4 to 7 a month and our lab of six is now asking whether we should all move to something cheaper."
+    },
+    {
+      "id": "p02",
+      "author": "night_owl_notes",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 9,
+      "text": "I pay it because the templates save me hours every week, but I understand why a lab would balk at paying for six seats."
+    },
+    {
+      "id": "p03",
+      "author": "tomasz_r",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 11,
+      "text": "We cancelled the team plan in April. Nobody could justify the jump to the department, so half of us went back to the free tier."
+    },
+    {
+      "id": "p04",
+      "author": "night_owl_notes",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": "p03",
+      "score": 4,
+      "text": "The free tier caps you at 1,000 notes though, which you hit fast if you clip papers."
+    },
+    {
+      "id": "p05",
+      "author": "lena.v",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 6,
+      "text": "Honestly the price is fine for what it does, my problem is how slow search gets once it's full."
+    },
+    {
+      "id": "p06",
+      "author": "quietdesk",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 5,
+      "text": "I would pay more if offline mode worked properly on the train."
+    },
+    {
+      "id": "p07",
+      "author": "night_owl_notes",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": "p06",
+      "score": 2,
+      "text": "Offline has improved since March but it still loses the last edit sometimes."
+    },
+    {
+      "id": "p08",
+      "author": "pb_writes",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 7,
+      "text": "Students get half price if you email support with a university address."
+    },
+    {
+      "id": "p09",
+      "author": "deal_hunter_x",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 0,
+      "text": "Use my code QUILL20 for a discount on Pro, link in bio!"
+    },
+    {
+      "id": "p10",
+      "author": "night_owl_notes",
+      "date": "2026-04-02",
+      "date_approx": false,
+      "parent": null,
+      "score": 3,
+      "text": "For the record I'd still recommend it to a solo researcher at the new price."
+    }
+  ]
+}

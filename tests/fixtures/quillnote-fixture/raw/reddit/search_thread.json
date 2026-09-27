@@ -1,0 +1,211 @@
+[
+ {
+  "kind": "Listing",
+  "data": {
+   "children": [
+    {
+     "kind": "t3",
+     "data": {
+      "id": "q2srch",
+      "author": "archivist_jo",
+      "title": "Search is slow once you pass 2,000 notes",
+      "selftext": "Anyone else? It takes about ten seconds to find anything in my archive now.",
+      "score": 42,
+      "created_utc": 1778749200,
+      "subreddit": "notetaking"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "kind": "Listing",
+  "data": {
+   "children": [
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c01",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "night_owl_notes",
+      "body": "Yes, past about 3,000 notes it crawls. I keep a separate index file as a workaround.",
+      "score": 18,
+      "created_utc": 1778749620,
+      "subreddit": "notetaking",
+      "replies": ""
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c02",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "kb_lin",
+      "body": "I switched to a plain folder of markdown files for the archive and only keep active projects in Quillnote.",
+      "score": 15,
+      "created_utc": 1778750040,
+      "subreddit": "notetaking",
+      "replies": ""
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c03",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "fern_and_ink",
+      "body": "Search is fine for me with 500 notes, so it must be a scale problem.",
+      "score": 8,
+      "created_utc": 1778750460,
+      "subreddit": "notetaking",
+      "replies": {
+       "kind": "Listing",
+       "data": {
+        "children": [
+         {
+          "kind": "t1",
+          "data": {
+           "id": "c04",
+           "parent_id": "t1_c03",
+           "link_id": "t3_q2srch",
+           "author": "night_owl_notes",
+           "body": "It is scale. Tags help a little because filtering by tag first is faster.",
+           "score": 6,
+           "created_utc": 1778750880,
+           "subreddit": "notetaking",
+           "replies": ""
+          }
+         }
+        ]
+       }
+      }
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c05",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "rowan_p",
+      "body": "The backlinks panel is how I find things now instead of search.",
+      "score": 12,
+      "created_utc": 1778751300,
+      "subreddit": "notetaking",
+      "replies": ""
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c06",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "the_indexer",
+      "body": "Support told me a new search engine is coming in the autumn release.",
+      "score": 20,
+      "created_utc": 1778751720,
+      "subreddit": "notetaking",
+      "replies": {
+       "kind": "Listing",
+       "data": {
+        "children": [
+         {
+          "kind": "t1",
+          "data": {
+           "id": "c07",
+           "parent_id": "t1_c06",
+           "link_id": "t3_q2srch",
+           "author": "night_owl_notes",
+           "body": "They said the same last year, so I wouldn't plan around it.",
+           "score": 9,
+           "created_utc": 1778752140,
+           "subreddit": "notetaking",
+           "replies": ""
+          }
+         }
+        ]
+       }
+      }
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c08",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "mika.s",
+      "body": "Exporting to search elsewhere loses the links between notes, which is the whole point.",
+      "score": 7,
+      "created_utc": 1778752560,
+      "subreddit": "notetaking",
+      "replies": ""
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c09",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "oldschool_ed",
+      "body": "I gave up and went back to a paper index for my thesis references.",
+      "score": 5,
+      "created_utc": 1778752980,
+      "subreddit": "notetaking",
+      "replies": {
+       "kind": "Listing",
+       "data": {
+        "children": [
+         {
+          "kind": "t1",
+          "data": {
+           "id": "c10",
+           "parent_id": "t1_c09",
+           "link_id": "t3_q2srch",
+           "author": "night_owl_notes",
+           "body": "A paper index for references is not as mad as it sounds, I have done the same.",
+           "score": 3,
+           "created_utc": 1778753400,
+           "subreddit": "notetaking",
+           "replies": ""
+          }
+         }
+        ]
+       }
+      }
+     }
+    },
+    {
+     "kind": "t1",
+     "data": {
+      "id": "c11",
+      "parent_id": "t3_q2srch",
+      "link_id": "t3_q2srch",
+      "author": "lurker_b",
+      "body": "Same, it's painful.",
+      "score": 1,
+      "created_utc": 1778753820,
+      "subreddit": "notetaking",
+      "replies": ""
+     }
+    },
+    {
+     "kind": "more",
+     "data": {
+      "count": 3,
+      "children": [
+       "x1",
+       "x2",
+       "x3"
+      ]
+     }
+    }
+   ]
+  }
+ }
+]

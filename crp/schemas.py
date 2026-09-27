@@ -85,19 +85,22 @@ COLLECTION_LOG_COLUMNS = list(CollectionLogRow.model_fields)
 
 # ---- posts -------------------------------------------------------------------
 
-class Post(Strict):
-    """One row of studies/<id>/posts.jsonl: a forum post or comment, or an interview turn, anonymised."""
+class _PostBase(Strict):
     post_id: Annotated[str, Field(pattern=r"^[A-Za-z0-9_.:-]+$")]
     source_type: Literal["forum", "interview"]
     source: NonEmpty  # site or community, e.g. "reddit.com/r/notetaking"; "interview" for transcripts
     thread_id: NonEmpty  # the thread, or the interview transcript
+    thread_title: str | None = None
+    search_term: str | None = None  # the search that found the thread (collection log), if known
     parent_id: str | None = None
-    person_code: PersonCode
-    role: Literal["participant", "interviewer"] = "participant"
+    role: Literal["participant", "interviewer", "unknown"] = "participant"  # unknown: removed, or unlabelled text
     kind: Literal["post", "comment", "turn"]
     timestamp: dt.datetime | None = None
     date_approx: bool = False
     score: int | None = None
+    start_s: float | None = None  # interview recordings: seconds from the start
+    end_s: float | None = None
+    promotional: bool = False
     text: str
     capture_method: Literal["paste", "screenshot", "export", "transcript"]
     raw_ref: NonEmpty  # where the original sits in raw/, e.g. "forum_price.txt#p3"
@@ -111,13 +114,13 @@ class Post(Strict):
         return v
 
     @model_validator(mode="after")
-    def _consistent(self) -> Post:
+    def _consistent(self) -> _PostBase:
         if self.source_type == "forum":
             if self.capture_method == "transcript":
                 raise ValueError("forum posts are captured by paste, screenshot or export, not transcript")
             if self.kind == "turn":
                 raise ValueError("forum posts are a 'post' or a 'comment', not a 'turn'")
-            if self.role != "participant":
+            if self.role == "interviewer":
                 raise ValueError("forum posts have no interviewer")
         else:
             if self.capture_method != "transcript":
@@ -131,6 +134,16 @@ class Post(Strict):
         if self.date_approx and self.timestamp is None:
             raise ValueError("date_approx is set but there is no timestamp")
         return self
+
+
+class IngestedPost(_PostBase):
+    """One row of raw/ingested.jsonl: parsed but not yet anonymised. Holds real names, so it stays in raw/."""
+    author: str | None = None  # None when no name is shown; each such post counts as its own person
+
+
+class Post(_PostBase):
+    """One row of studies/<id>/posts.jsonl: a forum post or comment, or an interview turn, anonymised."""
+    person_code: PersonCode
 
 
 # ---- codebook and labels -----------------------------------------------------
