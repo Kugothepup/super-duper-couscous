@@ -262,41 +262,236 @@ class HumanLabel(Strict):
 
 # ---- results -----------------------------------------------------------------
 
-class Measure(Strict):
-    """One number-bearing result. Its status must match the thresholds (D11): counts only below 20 people."""
-    name: NonEmpty
-    method: NonEmpty
+Status = Literal["full", "early-signal", "counts-only"]
+Range = tuple[float, float]
+Resample = Literal["people", "threads"]
+
+
+class Share(Strict):
+    """k of n, with the people and items it rests on and how it was worked out. The status must match the
+    thresholds (D11): counts-only carries k and n only. pct is always round(100k/n, 1), so a number typed in
+    by hand can't pass. range is the wider of the two resampled ranges (D3, D28)."""
+    k: int = Field(ge=0)
+    n: int = Field(ge=0)
     n_people: int = Field(ge=0)
     n_items: int = Field(ge=0)
-    status: Literal["full", "early-signal", "counts-only"]
-    k: int | None = Field(default=None, ge=0)
-    share_pct: float | None = Field(default=None, ge=0, le=100)
-    range_pct: tuple[float, float] | None = None
-    probability_pct: float | None = Field(default=None, ge=0, le=100)
+    status: Status
+    method: NonEmpty
+    pct: float | None = None
+    range: Range | None = None
+    range_from: Resample | None = None
+    range_people: Range | None = None
+    range_threads: Range | None = None
 
     @model_validator(mode="after")
-    def _status_fits(self) -> Measure:
+    def _consistent(self) -> Share:
         expected = thresholds.result_status(self.n_people, self.n_items)
         if self.status != expected:
             raise ValueError(f"status is '{self.status}' but {self.n_people} people and "
                              f"{self.n_items} items make it '{expected}'")
+        if self.k > self.n:
+            raise ValueError(f"k ({self.k}) is more than n ({self.n})")
+        ranges = ("range", "range_from", "range_people", "range_threads")
         if self.status == "counts-only":
-            given = [f for f in ("share_pct", "range_pct", "probability_pct") if getattr(self, f) is not None]
+            given = [f for f in ("pct",) + ranges if getattr(self, f) is not None]
             if given:
                 raise ValueError(f"counts-only results can't carry {', '.join(given)}")
-            if self.k is None:
-                raise ValueError("counts-only results need k")
-        if self.range_pct is not None and self.range_pct[0] > self.range_pct[1]:
-            raise ValueError("range_pct runs high to low")
+            return self
+        want = round(100 * self.k / self.n, 1) if self.n else None
+        if self.pct != want:
+            raise ValueError(f"pct is {self.pct}, but {self.k} of {self.n} is {want}")
+        for f in ranges[2:] + ("range",):
+            r = getattr(self, f)
+            if r is not None and r[0] > r[1]:
+                raise ValueError(f"{f} runs high to low")
+        if self.range is not None and self.range != getattr(self, f"range_{self.range_from}", None):
+            raise ValueError("range must be the range_people or range_threads that range_from names")
         return self
 
 
+class Probability(Strict):
+    """% of re-draws in which something held. pct is whichever of the two is nearer 50% (D29)."""
+    pct: float = Field(ge=0, le=100)
+    source: Resample
+    pct_people: float | None = Field(default=None, ge=0, le=100)
+    pct_threads: float | None = Field(default=None, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _picked(self) -> Probability:
+        if self.pct != getattr(self, f"pct_{self.source}"):
+            raise ValueError("pct must be the pct_people or pct_threads that source names")
+        return self
+
+
+class Comparison(Strict):
+    """Before and after (or first and last period), with the change in points and its resampled range."""
+    measure: NonEmpty
+    before: Share
+    after: Share
+    diff_pts: float | None = None
+    range: Range | None = None
+    range_from: Resample | None = None
+    range_people: Range | None = None
+    range_threads: Range | None = None
+    verdict: Literal["rose", "fell", "no clear change", "insufficient data", "worsening", "improving"]
+
+
+class SampleInfo(Strict):
+    n_items: int = Field(ge=0)
+    n_people: int = Field(ge=0)
+    n_threads: int = Field(ge=0)
+    status: Status
+    target: int
+    eligible: int
+    person_cap: int
+    thread_cap_pct: int
+    thread_cap_loosened: bool
+
+
+class Headline(Strict):
+    negative: Share
+    neutral: Share
+    positive: Share
+    mean: float | None = None
+    people_net_negative: Share  # secondary, per person (D8)
+
+
+class AspectResult(Strict):
+    aspect: NonEmpty
+    mentions: int = Field(ge=0)
+    people: int = Field(ge=0)
+    mean: float | None = None
+    strong_negative: int = Field(ge=0)
+    ranked: bool
+    negative_rate: Share
+    share_of_negative: Share
+    share_of_positive: Share
+    mention_rate: Share
+    top_driver: Probability | None = None
+
+
+class StanceResult(Strict):
+    target: str | None = None
+    expressing: Share
+    in_favour: Share
+    against: Share
+    neither: Share
+    talks_about: dict[Literal["in_favour", "against"], dict[str, Share]]
+
+
+class EventResult(Strict):
+    date: dt.date
+    measures: list[Comparison]
+    aspect_shifts: list[Comparison]
+    note: NonEmpty
+
+
+class Period(Strict):
+    period: NonEmpty
+    negative: Share
+    top_aspects: dict[str, Share]
+
+
+class Direction(Strict):
+    status: Literal["no timestamps", "single window", "ok"]
+    unit: Literal["week", "month"] | None = None
+    span_days: int | None = None
+    periods: list[Period] = []
+    usable_periods: list[str] = []
+    trend: Comparison | None = None
+    switching: dict[str, Share] = {}
+    note: str | None = None
+
+
+class SourceRow(Strict):
+    source: NonEmpty
+    share_of_sample: Share
+    negative: Share
+
+
+class Removal(Strict):
+    kind: Literal["source", "search_term", "thread"]
+    removed: NonEmpty
+    negative: Share
+
+
+class WeightedEstimate(Strict):
+    """A share estimated with weights (D27), so it has no whole-number k."""
+    pct: float | None = Field(default=None, ge=0, le=100)
+    n_people: int = Field(ge=0)
+    n_items: int = Field(ge=0)
+    status: Status
+    method: NonEmpty
+
+    @model_validator(mode="after")
+    def _status_fits(self) -> WeightedEstimate:
+        expected = thresholds.result_status(self.n_people, self.n_items)
+        if self.status != expected:
+            raise ValueError(f"status is '{self.status}' but should be '{expected}'")
+        if self.status == "counts-only" and self.pct is not None:
+            raise ValueError("counts-only results can't carry pct")
+        return self
+
+
+class Sensitivity(Strict):
+    removals: list[Removal]
+    removals_with_pct: int = Field(default=0, ge=0)  # the rest leave too few people for a percentage (D11)
+    min_pct: float | None = None
+    max_pct: float | None = None
+    most_moved: dict[str, str | float] | None = None
+    without_caps: WeightedEstimate | None = None
+
+
+class Interviews(Strict):
+    """Interviews, counted on their own and never pooled with forum figures (D14)."""
+    transcripts: int = Field(ge=0)
+    participants: int = Field(ge=0)
+    turns: int = Field(ge=0)
+    coded_turns: int = Field(ge=0)
+    codes: dict[str, dict[str, int]] = {}
+
+
+class KeyTerm(Strict):
+    term: NonEmpty
+    freq: int
+    other_freq: int
+    reach: int
+    g2: float
+    log_ratio: float
+    p: float
+    q: float | None = None
+
+
+class Keyness(Strict):
+    shown: bool
+    reason: str | None = None
+    method: NonEmpty
+    basis: dict[str, int] = {}
+    negative: list[KeyTerm] = []
+    positive: list[KeyTerm] = []
+
+
 class Results(Strict):
-    """studies/<id>/results/results.json. Later phases add their sections here."""
+    """studies/<id>/results/results.json: every number the outputs show, made by crp analyse."""
     study_id: Slug
-    generated_at: dt.datetime
     seed: int
-    codebook_version: NonEmpty | None = None
+    bootstrap_draws: int = Field(ge=0)
+    inputs: dict[str, str]  # sha256 of every input; no timestamp, so the same seed gives the same file
+    codebook_version: NonEmpty
+    coder_model: NonEmpty
     agreement_status: dict[str, Literal["verified", "tentative", "unverified"]] = {}  # per variable (D25)
-    alpha: dict[str, float] = {}
-    measures: list[Measure] = []
+    alpha: dict[str, float | None] = {}
+    sample: SampleInfo
+    headline: Headline | None = None
+    aspects: list[AspectResult] = []
+    drivers: list[str] = []
+    strengths: list[str] = []
+    rare: list[str] = []
+    stance: StanceResult | None = None
+    event: EventResult | None = None
+    direction: Direction | None = None
+    by_source: list[SourceRow] = []
+    dominant_source: str | None = None
+    sensitivity: Sensitivity | None = None
+    interviews: Interviews | None = None
+    keyness: Keyness | None = None

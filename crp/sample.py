@@ -272,7 +272,7 @@ def sample(study_dir: Path, seed: int | None = None, size: int = thresholds.MEAS
         detail += [DetailItem(post_id=p.post_id, thread_id=p.thread_id, person_code=p.person_code,
                               source_type="interview", reasons=["interview"]) for p in interview]
         write_jsonl(study_dir / DETAIL, sorted(detail, key=lambda d: order[d.post_id]))
-        m_info["frame"] = {"forum_posts": sum(p.source_type == "forum" for p in posts),
+        m_info["frame"] = {"forum_posts": sum(p.source_type == "forum" for p in posts), "min_words": min_words,
                            "left_out": dict(sorted(left_out.items()))} | m_info["frame"]
         m_info["sha256"] = sha256_file(study_dir / MEASUREMENT)
         summary = {"seed": seed, "seed_source": seed_source, "posts_sha256": sha256_file(posts_path),

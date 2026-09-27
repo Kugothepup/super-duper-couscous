@@ -9,6 +9,7 @@ from pathlib import Path
 from crp.anonymise import anonymise
 from crp.ingest import ingest
 from crp import agreement, labels, thresholds
+from crp.analyse import analyse
 from crp.batch import make_batches
 from crp.codebook import freeze
 from crp.io import InputError, validate
@@ -263,6 +264,66 @@ def cmd_agreement_score(args: argparse.Namespace) -> int:
     return 0
 
 
+def show_share(sh: dict | None) -> str:
+    if not sh:
+        return "n/a"
+    if sh["status"] == "counts-only":
+        return f"{sh['k']} of {sh['n']} (count only)"
+    rng = f", likely {sh['range'][0]}-{sh['range'][1]}% ({sh['range_from']})" if sh.get("range") else ""
+    early = ", early signal" if sh["status"] == "early-signal" else ""
+    return f"{sh['pct']}% ({sh['k']} of {sh['n']}{rng}{early})"
+
+
+def cmd_analyse(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    out = analyse(d, seed=args.seed, draws=args.draws)
+    r = out["results"].model_dump(mode="json", exclude_none=True)
+    s = r["sample"]
+    print(f"Sample: {s['n_items']} comments from {s['n_people']} people in {s['n_threads']} threads ({s['status']}); "
+          f"seed {r['seed']}, {r['bootstrap_draws']} re-draws")
+    if s["thread_cap_loosened"]:
+        print(f"! The thread cap was loosened to {s['thread_cap_pct']}%.")
+    if out["agreement_note"]:
+        print(f"! {out['agreement_note']}")
+    if not r["agreement_status"]:
+        print("! Agreement hasn't been scored: every section is unverified (D5).")
+    h = r.get("headline")
+    if h:
+        print(f"Negative {show_share(h['negative'])}; positive {show_share(h['positive'])}")
+        print(f"People net negative (secondary): {show_share(h['people_net_negative'])}")
+        by = {a["aspect"]: a for a in r["aspects"]}
+        if r["drivers"]:
+            print("Drivers (share of negative aspect mentions):")
+            for name in r["drivers"][:8]:
+                a = by[name]
+                top = f"; top driver in {a['top_driver']['pct']}% of re-draws" if a.get("top_driver") else ""
+                print(f"  {name:<18} {show_share(a['share_of_negative'])}{top}")
+        if r["rare"]:
+            print(f"Rare aspects (under {stats_min()} mentions): {', '.join(r['rare'])}")
+        sens = r.get("sensitivity", {})
+        if sens.get("most_moved"):
+            mm = sens["most_moved"]
+            print(f"Leave-one-out: {sens['min_pct']}-{sens['max_pct']}% over {sens['removals_with_pct']} of "
+                  f"{len(sens['removals'])} removals (the rest leave too few people for a percentage); most moved by "
+                  f"leaving out {mm['kind'].replace('_', ' ')} {mm['removed']} ({mm['change_pts']:+} points)")
+        wc = sens.get("without_caps")
+        if wc and wc.get("pct") is not None:
+            print(f"Without caps (estimated): {wc['pct']}% negative")
+        k = r.get("keyness", {})
+        print(f"Keyness: {'shown' if k.get('shown') else k.get('reason', 'not run')}")
+    if r.get("interviews"):
+        iv = r["interviews"]
+        print(f"Interviews (own section, counts only): {iv['transcripts']} transcript(s), {iv['participants']} "
+              f"participant(s), {iv['coded_turns']} of {iv['turns']} turns coded")
+    print(f"Written to {d}/results/results.json")
+    return 0
+
+
+def stats_min() -> int:
+    from crp.stats import MIN_MENTIONS
+    return MIN_MENTIONS
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m crp",
                                      description="Community research pipeline: the code that counts.")
@@ -364,6 +425,12 @@ def build_parser() -> argparse.ArgumentParser:
     q = asub.add_parser("score", help="Krippendorff's alpha, human against blind coder")
     q.add_argument("study")
     q.set_defaults(func=cmd_agreement_score)
+
+    p = sub.add_parser("analyse", help="every number, from the locked labels, into results/results.json")
+    p.add_argument("study")
+    p.add_argument("--seed", type=int, help="seed for the re-draws (default: the sample's)")
+    p.add_argument("--draws", type=int, default=5000, help="bootstrap re-draws (default 5000)")
+    p.set_defaults(func=cmd_analyse)
     return parser
 
 

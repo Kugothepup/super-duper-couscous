@@ -3,7 +3,7 @@ import json
 import pytest
 
 from crp.io import InputError, read_csv, read_jsonl, validate
-from crp.schemas import (COLLECTION_LOG_COLUMNS, Codebook, CollectionLogRow, Label, Measure, Post, Study)
+from crp.schemas import (COLLECTION_LOG_COLUMNS, Codebook, CollectionLogRow, Label, Post, Share, Study)
 
 HEADER = ",".join(COLLECTION_LOG_COLUMNS)
 
@@ -185,21 +185,34 @@ def test_label_rationale_is_capped_at_15_words():
         validate(Label, {"item_id": "i1", "values": {}, "rationale": " ".join(["word"] * 16)}, "label")
 
 
-def test_measure_status_must_match_thresholds():
+def share(**kw) -> dict:
+    return {"k": 90, "n": 150, "n_people": 96, "n_items": 150, "status": "full", "method": "m", "pct": 60.0} | kw
+
+
+def test_share_status_must_match_thresholds():
     with pytest.raises(InputError, match="status is 'full' but 12 people and 150 items make it 'counts-only'"):
-        validate(Measure, {"name": "negative", "method": "m", "n_people": 12, "n_items": 150,
-                           "status": "full", "share_pct": 60.0}, "measure")
+        validate(Share, share(n_people=12), "share")
 
 
-def test_counts_only_measure_cannot_carry_ranges():
-    with pytest.raises(InputError, match="counts-only results can't carry share_pct, range_pct"):
-        validate(Measure, {"name": "negative", "method": "m", "n_people": 12, "n_items": 40,
-                           "status": "counts-only", "k": 25, "share_pct": 62.5, "range_pct": [40, 80]}, "measure")
+def test_counts_only_share_cannot_carry_a_percentage_or_range():
+    with pytest.raises(InputError, match="counts-only results can't carry pct, range"):
+        validate(Share, share(n_people=12, status="counts-only", range=[40, 80], range_from="people",
+                              range_people=[40, 80]), "share")
+    assert validate(Share, share(n_people=12, status="counts-only", pct=None), "share").k == 90
 
 
-def test_early_signal_and_full_measures_validate():
-    early = validate(Measure, {"name": "negative", "method": "m", "n_people": 25, "n_items": 40,
-                               "status": "early-signal", "share_pct": 62.5, "range_pct": [45, 78]}, "m")
-    full = validate(Measure, {"name": "negative", "method": "m", "n_people": 96, "n_items": 150,
-                              "status": "full", "share_pct": 64.7, "range_pct": [56.8, 72.1]}, "m")
-    assert early.status == "early-signal" and full.status == "full"
+def test_share_pct_must_be_k_of_n():
+    with pytest.raises(InputError, match="pct is 64.7, but 90 of 150 is 60.0"):
+        validate(Share, share(pct=64.7), "share")
+
+
+def test_share_range_is_the_one_it_names():
+    ok = share(range=[52.0, 68.1], range_from="threads", range_people=[53.3, 66.7], range_threads=[52.0, 68.1])
+    assert validate(Share, ok, "share").range == (52.0, 68.1)
+    with pytest.raises(InputError, match="range must be the range_people or range_threads"):
+        validate(Share, ok | {"range_from": "people"}, "share")
+
+
+def test_early_signal_and_full_shares_validate():
+    early = validate(Share, share(n_people=25, n_items=40, status="early-signal"), "s")
+    assert early.status == "early-signal" and validate(Share, share(), "s").status == "full"
