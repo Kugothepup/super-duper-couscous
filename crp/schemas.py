@@ -7,7 +7,7 @@ from __future__ import annotations
 import datetime as dt
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, StrictStr, field_validator, model_validator
 
 from crp import thresholds
 
@@ -15,7 +15,8 @@ Slug = Annotated[str, Field(pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")]
 PersonCode = Annotated[str, Field(pattern=r"^P-[0-9a-f]{8}$")]
 NonEmpty = Annotated[str, Field(min_length=1)]
 StudyType = Literal["product", "brand", "news", "topic"]
-LabelValue = bool | int | str | dict[str, int] | None
+# strict: a coder's 1 must not pass as true, or "2" as 2
+LabelValue = StrictBool | StrictInt | StrictStr | dict[StrictStr, StrictInt] | None
 
 
 class Strict(BaseModel):
@@ -204,6 +205,8 @@ class Codebook(Strict):
     study_type: StudyType
     aspects: list[Annotated[str, Field(pattern=r"^[a-z][a-z-]*( [a-z][a-z-]*)?$")]] = []
     aspect_definitions: dict[str, NonEmpty] = {}
+    instructions: list[NonEmpty] = []  # coding rules for every variable, e.g. the coding guide's judgement calls
+    parent_context: bool = True  # show the coder the post a comment replies to (or the question a turn answers)
     variables: list[Variable] = Field(min_length=1)
 
     @model_validator(mode="after")

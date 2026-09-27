@@ -8,7 +8,9 @@ from pathlib import Path
 
 from crp.anonymise import anonymise
 from crp.ingest import ingest
-from crp import thresholds
+from crp import agreement, labels, thresholds
+from crp.batch import make_batches
+from crp.codebook import freeze
 from crp.io import InputError, validate
 from crp.sample import sample
 from crp.scaffold import new_study
@@ -164,6 +166,98 @@ def cmd_sample(args: argparse.Namespace) -> int:
         print(f"  Interviews are read in full: {det['interview_turns']} participant turn(s) added")
     print(f"Written to {d}/samples/detail.jsonl (purposive: never used for percentages)")
     print("Stop here: show Steeve the selection. If a topic cluster got few picks, re-run with a larger --budget.")
+    print("Then: draft codebook.yaml. Once Steeve approves it: crp codebook freeze")
+    return 0
+
+
+def cmd_codebook_freeze(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    lock = freeze(d, new_version=args.new_version)
+    if lock.get("unchanged"):
+        print(f"Codebook version {lock['version']} is already frozen, unchanged.")
+        return 0
+    print(f"Froze codebook version {lock['version']} (codebook.lock). From now on it can't change "
+          "without a new version and coding everything again.")
+    if lock.get("superseded"):
+        print(f"Moved the version {lock['replaces']} files to {lock['superseded'][-1]}/: "
+              + ", ".join(lock["superseded"][:-1]))
+    print("Next: crp batch")
+    return 0
+
+
+def cmd_batch(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = make_batches(d, size=args.size, seed=args.seed)
+    state = "unchanged" if rep["unchanged"] else "written"
+    print(f"Batches {state} (items shuffled with seed {rep['seed']}):")
+    for b in rep["batches"]:
+        print(f"  {b['batch']}  {b['sample']:<11}  {b['items']:>3} items")
+    print("Next: for each batch, delegate to the blind-coder agent with only two paths:")
+    print(f"  {d}/batches/batch_NNN.jsonl  and  {d}/labels/batch_NNN.labels.jsonl")
+    print("Then: crp labels validate")
+    return 0
+
+
+def cmd_labels_validate(args: argparse.Namespace) -> int:
+    rep = labels.validate(study_dir(args.study), args.batch)
+    for b in rep["batches"]:
+        mark = "ok  " if not b["errors"] else "FAIL"
+        print(f"{mark} {b['batch']}: {b['coded']} of {b['items']} items labelled")
+        for e in b["errors"]:
+            print(f"     ! {e}")
+        for w in b["warnings"]:
+            print(f"     ~ {w}")
+    if not rep["ok"]:
+        print("Fix the problems above (re-run the blind coder on a batch if needed), then validate again.")
+        return 1
+    print("Next: crp labels lock --coder-model <model the blind coder ran on>")
+    return 0
+
+
+def cmd_labels_lock(args: argparse.Namespace) -> int:
+    data = labels.lock(study_dir(args.study), args.coder_model)
+    if data.get("unchanged"):
+        print(f"The labels were already locked at {data['locked_at']}, unchanged.")
+    else:
+        print(f"Locked {data['items']} labelled items (codebook version {data['codebook_version']}, "
+              f"coder {data['coder_model']}) in labels.lock.")
+    print("Next: crp unseal, then crp agreement export")
+    return 0
+
+
+def cmd_unseal(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = labels.unseal(d)
+    print(f"Copied the sealed prior to {d}/results/prior.md (labels locked at {rep['labels_locked_at']}).")
+    if rep["prior_modified_after_first_ingest"]:
+        print(f"! The prior was last changed at {rep['prior_modified']}, after the first crp ingest. "
+              "The report must say so.")
+    return 0
+
+
+def cmd_agreement_export(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = agreement.export(d, n=args.n, seed=args.seed)
+    print(f"Wrote {d}/human/agreement_sheet.csv: {rep['items']} of {rep['of']} coded items, seed {rep['seed']}, "
+          "no AI labels. The codebook for the human coder is in human/agreement_guide.md.")
+    print("Stop here: Steeve codes the sheet and saves it as human/human_labels.csv. Then: crp agreement score")
+    return 0
+
+
+def cmd_agreement_score(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = agreement.score(d)
+    print(f"Agreement between {', '.join(rep['coders'])} on {rep['items']} items "
+          f"(verified at {rep['thresholds']['verified']}, tentative from {rep['thresholds']['tentative']}):")
+    for name, m in rep["metrics"].items():
+        alpha = "  n/a" if m["alpha"] is None else f"{m['alpha']:.3f}"
+        note = f"  ({m['note']})" if m.get("note") else ""
+        print(f"  {name:<28} alpha {alpha}  {m['status']:<10}  {m['pairable']} compared ({m['level']}){note}")
+    for t in rep["confusion"]:
+        print(f"  {t['variable']}: rows {t['rows']}, columns {t['columns']}, values {t['values']}")
+        for v, row in zip(t["values"], t["counts"]):
+            print(f"    {v:>3}  " + " ".join(f"{c:>3}" for c in row))
+    print(f"Study status: {rep['status']} (the lowest across variables). Written to {d}/results/agreement.json")
     return 0
 
 
@@ -223,6 +317,48 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-words", type=int, default=thresholds.MIN_WORDS,
                    help=f"leave out comments shorter than this (default {thresholds.MIN_WORDS})")
     p.set_defaults(func=cmd_sample)
+
+    p = sub.add_parser("codebook", help="freeze the codebook")
+    csub = p.add_subparsers(dest="action", required=True, metavar="action")
+    q = csub.add_parser("freeze", help="check codebook.yaml and write codebook.lock")
+    q.add_argument("study")
+    q.add_argument("--new-version", action="store_true",
+                   help="replace a frozen codebook with a new version (Steeve's call): old batches and labels "
+                        "move to superseded/")
+    q.set_defaults(func=cmd_codebook_freeze)
+
+    p = sub.add_parser("batch", help="write blinded batch files for the blind coder")
+    p.add_argument("study")
+    p.add_argument("--size", type=int, default=40, help="items per batch (default 40)")
+    p.add_argument("--seed", type=int, help="seed for the item order (default: the sample's)")
+    p.set_defaults(func=cmd_batch)
+
+    p = sub.add_parser("labels", help="validate and lock the blind coder's labels")
+    lsub = p.add_subparsers(dest="action", required=True, metavar="action")
+    q = lsub.add_parser("validate", help="check every item is labelled with codebook values")
+    q.add_argument("study")
+    q.add_argument("--batch", action="append", help="only this batch, e.g. batch_001 (repeatable)")
+    q.set_defaults(func=cmd_labels_validate)
+    q = lsub.add_parser("lock", help="hash the labels so they can't change; allows crp unseal")
+    q.add_argument("study")
+    q.add_argument("--coder-model", required=True, help="the model the blind-coder agent ran on")
+    q.set_defaults(func=cmd_labels_lock)
+
+    p = sub.add_parser("unseal", help="after the labels are locked, copy sealed/prior.md to results/")
+    p.add_argument("study")
+    p.set_defaults(func=cmd_unseal)
+
+    p = sub.add_parser("agreement", help="human agreement check")
+    asub = p.add_subparsers(dest="action", required=True, metavar="action")
+    q = asub.add_parser("export", help="write a blind sheet for a human coder")
+    q.add_argument("study")
+    q.add_argument("--n", type=int, default=agreement.SAMPLE_SIZE,
+                   help=f"items to include (default {agreement.SAMPLE_SIZE}, or all if fewer)")
+    q.add_argument("--seed", type=int, help="seed for choosing items (default: the batches' seed)")
+    q.set_defaults(func=cmd_agreement_export)
+    q = asub.add_parser("score", help="Krippendorff's alpha, human against blind coder")
+    q.add_argument("study")
+    q.set_defaults(func=cmd_agreement_score)
     return parser
 
 

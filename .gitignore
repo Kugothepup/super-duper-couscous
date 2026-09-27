@@ -3,6 +3,8 @@
 studies/*/raw/
 studies/*/sealed/
 studies/*/human/
+# old codebook versions' files, which may include a human/ folder
+studies/*/superseded/
 
 # Outputs that may contain quotes (commit shareable builds deliberately if needed)
 studies/*/results/dashboard.html

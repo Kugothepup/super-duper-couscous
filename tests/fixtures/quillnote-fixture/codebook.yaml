@@ -11,9 +11,21 @@ aspect_definitions:
   pricing: what it costs, plans and discounts
   search: finding notes by searching
   sync: keeping notes the same across devices
+instructions:
+- Code every item, including dull ones.
+- 'Negation and shifters: "not bad" is mildly positive; "hardly works" is negative.'
+- 'But-clauses: the clause after "but" usually carries the overall score, while each
+  aspect keeps its own score.'
+- 'Implied opinions count: "search takes 10 seconds" is negative on search with no
+  sentiment word.'
+- 'Sarcasm: "great, another price rise" is negative. If you can''t tell, score 0.'
+- 'Intensity: -2 and 2 need strong language, a severe consequence (lost work, cancelled,
+  switched) or emphasis. Plain complaints are -1.'
+- Questions and help requests are usually 0 overall unless they carry a complaint.
+- 'Aspects: score only aspects the text evaluates. A bare mention isn''t an evaluation.'
 variables:
 - name: overall
-  description: The writer's evaluation of Quillnote, not their mood (D13)
+  description: The writer's evaluation of Quillnote, not their mood
   applies_to: measurement
   kind: single
   level: ordinal
