@@ -237,9 +237,10 @@ def cmd_unseal(args: argparse.Namespace) -> int:
 
 def cmd_agreement_export(args: argparse.Namespace) -> int:
     d = study_dir(args.study)
-    rep = agreement.export(d, n=args.n, seed=args.seed)
-    print(f"Wrote {d}/human/agreement_sheet.csv: {rep['items']} of {rep['of']} coded items, seed {rep['seed']}, "
-          "no AI labels. The codebook for the human coder is in human/agreement_guide.md.")
+    rep = agreement.export(d, n=args.n, measurement_n=args.measurement_n, seed=args.seed)
+    print(f"Wrote {d}/human/agreement_sheet.csv: {rep['items']} of {rep['of']} coded items ({rep['measurement']} "
+          f"measurement, then {rep['detail']} detail), seed {rep['seed']}, no AI labels. The codebook for the "
+          "human coder is in human/agreement_guide.md.")
     print("Stop here: Steeve codes the sheet and saves it as human/human_labels.csv. Then: crp agreement score")
     return 0
 
@@ -257,7 +258,8 @@ def cmd_agreement_score(args: argparse.Namespace) -> int:
         print(f"  {t['variable']}: rows {t['rows']}, columns {t['columns']}, values {t['values']}")
         for v, row in zip(t["values"], t["counts"]):
             print(f"    {v:>3}  " + " ".join(f"{c:>3}" for c in row))
-    print(f"Study status: {rep['status']} (the lowest across variables). Written to {d}/results/agreement.json")
+    print("Each section of the outputs shows the status of the variables it rests on (D25). "
+          f"Written to {d}/results/agreement.json")
     return 0
 
 
@@ -353,7 +355,10 @@ def build_parser() -> argparse.ArgumentParser:
     q = asub.add_parser("export", help="write a blind sheet for a human coder")
     q.add_argument("study")
     q.add_argument("--n", type=int, default=agreement.SAMPLE_SIZE,
-                   help=f"items to include (default {agreement.SAMPLE_SIZE}, or all if fewer)")
+                   help=f"items on the sheet (default {agreement.SAMPLE_SIZE})")
+    q.add_argument("--measurement-n", type=int, default=agreement.MEASUREMENT_ITEMS,
+                   help=f"of which from the measurement sample (default {agreement.MEASUREMENT_ITEMS}); "
+                        "if either sample is short, the other fills the rest")
     q.add_argument("--seed", type=int, help="seed for choosing items (default: the batches' seed)")
     q.set_defaults(func=cmd_agreement_export)
     q = asub.add_parser("score", help="Krippendorff's alpha, human against blind coder")

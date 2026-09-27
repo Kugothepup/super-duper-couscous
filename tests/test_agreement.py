@@ -8,7 +8,7 @@ import pytest
 
 from conftest import dummy_values, write_labels
 from crp import thresholds
-from crp.agreement import AI, columns, export, metrics, parse_cell, reliability_alpha, score
+from crp.agreement import AI, columns, export, metrics, parse_cell, quotas, reliability_alpha, score, section_status
 from crp.io import InputError
 from crp.labels import lock
 from crp.schemas import Codebook
@@ -88,8 +88,8 @@ def test_sheet_holds_no_ai_labels(batched):
     for p in (batched / "labels").iterdir():  # give every label a rationale that must not leak
         rows = [json.loads(line) | {"rationale": "ZEBRA rationale"} for line in p.read_text().splitlines()]
         p.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    out = export(batched, n=50)
-    assert out == {"items": 50, "of": 100, "seed": index["seed"]}
+    out = export(batched, n=50, measurement_n=20)
+    assert out == {"items": 50, "of": 100, "seed": index["seed"], "measurement": 20, "detail": 30}
     text = (batched / "human" / "agreement_sheet.csv").read_text()
     assert "ZEBRA" not in text
     sample_of = {it["item_id"]: b for b in index["batches"] for it in b["items"]}
@@ -107,16 +107,31 @@ def test_sheet_holds_no_ai_labels(batched):
     assert all(f"### {v}" in guide for v in ("overall", "aspect_scores", "jtbd_force", "severity"))
 
 
-def test_export_is_seeded_takes_all_when_fewer_and_keeps_a_coded_sheet(batched):
-    export(batched, n=30)
+def test_quotas_split_60_40_and_top_each_other_up():
+    assert quotas(100, 60, 150, 200) == (60, 40)
+    assert quotas(100, 60, 28, 72) == (28, 72)  # the fixture: too few measurement items, so detail fills in
+    assert quotas(100, 60, 150, 10) == (90, 10)  # too few detail items, so measurement fills in
+    assert quotas(100, 60, 30, 20) == (30, 20)  # fewer than 100 in all: every item
+    assert quotas(100, 60, 0, 72) == (0, 72)  # interviews only
+
+
+def test_default_sheet_puts_measurement_items_first(batched):
+    out = export(batched)
+    assert (out["measurement"], out["detail"]) == (28, 72)
+    ids = [r["item_id"] for r in sheet_rows(batched)]
+    assert all(i.startswith("m") for i in ids[:28]) and all(i.startswith("d") for i in ids[28:])
+
+
+def test_export_is_seeded_and_keeps_a_coded_sheet(batched):
+    export(batched, n=30, measurement_n=10)
     first = (batched / "human" / "agreement_sheet.csv").read_text()
-    export(batched, n=30)
+    export(batched, n=30, measurement_n=10)
     assert (batched / "human" / "agreement_sheet.csv").read_text() == first
-    assert export(batched, n=500)["items"] == 100
-    export(batched, n=30)
+    with pytest.raises(InputError, match="0 to 30 of them"):
+        export(batched, n=30, measurement_n=40)
     (batched / "human" / "human_labels.csv").write_text(first)
     with pytest.raises(InputError, match="already holds human codes"):
-        export(batched, n=30, seed=5)
+        export(batched, n=30, measurement_n=10, seed=5)
 
 
 # ---- score -------------------------------------------------------------------
@@ -169,7 +184,7 @@ def locked_study(batched):
 
 def test_score_needs_locked_labels(batched):
     write_labels(batched)
-    export(batched, n=10)
+    export(batched, n=10, measurement_n=5)
     with pytest.raises(InputError, match="aren't locked yet"):
         score(batched)
 
@@ -178,20 +193,21 @@ def test_perfect_agreement_is_verified(locked_study):
     ai = ai_values(locked_study)
     save(locked_study, fill(locked_study, "Steeve", ai.get))
     report = score(locked_study)
-    assert report["status"] == "verified" and report["coders"] == [AI, "Steeve"] and report["items"] == 100
+    assert report["coders"] == [AI, "Steeve"] and report["items"] == 100
     assert all(m["alpha"] == pytest.approx(1.0) and m["status"] == "verified" for m in report["metrics"].values())
     [table] = report["confusion"]
     counts = np.array(table["counts"])
     assert counts.sum() == sum(1 for i in ai if i.startswith("m")) and (counts == np.diag(np.diag(counts))).all()
     saved = json.loads((locked_study / "results" / "agreement.json").read_text())
-    assert saved["status"] == "verified" and saved["coder_model"] == "claude-opus-5-5"
+    assert section_status(saved, ["overall", "aspect_scores"]) == "verified" and saved["coder_model"] == "claude-opus-5-5"
 
 
 def test_disagreement_matches_a_direct_computation(locked_study):
     ai = ai_values(locked_study)
     flip = {i: v for i, v in ai.items() if i.startswith("m")}
     changed = sorted(flip)[::3]
-    human = {i: dict(v, overall=(v["overall"] + 2) % 5 - 2) if i in changed else v for i, v in ai.items()}
+    human = {i: dict(v, overall=(v["overall"] + 3) % 5 - 2) if i in changed else v for i, v in ai.items()}
+    assert sum(human[i]["overall"] != ai[i]["overall"] for i in changed) == len(changed) > 0
     save(locked_study, fill(locked_study, "Steeve", human.get))
     report = score(locked_study)
     ids = sorted(flip)
@@ -199,8 +215,21 @@ def test_disagreement_matches_a_direct_computation(locked_study):
     expected = krippendorff.alpha(reliability_data=raw, level_of_measurement="ordinal", value_domain=[-2, -1, 0, 1, 2])
     assert report["metrics"]["overall"]["alpha"] == pytest.approx(expected, abs=1e-12)
     assert report["metrics"]["overall"]["status"] == thresholds.agreement_status(expected)
-    assert report["status"] == report["metrics"]["overall"]["status"]  # the worst variable sets the study's status
-    assert report["metrics"]["jtbd_force"]["status"] == "verified"
+    assert report["metrics"]["overall"]["status"] != "verified"
+    # each section shows its own variables' status: a weak headline doesn't turn the forces section red
+    assert section_status(report, ["overall"]) == report["metrics"]["overall"]["status"]
+    assert section_status(report, ["overall", "aspect_scores"]) == report["metrics"]["overall"]["status"]
+    assert section_status(report, ["jtbd_force"]) == "verified"
+    assert section_status(report, ["friction", "severity", "aspect"]) == "verified"
+
+
+def test_section_status_is_unverified_until_every_variable_is_checked():
+    report = {"metrics": {"overall": {"status": "verified"}, "aspect_scores (mentioned)": {"status": "tentative"},
+                          "aspect_scores": {"status": "verified"}}}
+    assert section_status(None, ["overall"]) == "unverified"  # agreement not run
+    assert section_status(report, ["overall"]) == "verified"
+    assert section_status(report, ["aspect_scores"]) == "tentative"  # both of its scores count
+    assert section_status(report, ["overall", "stance"]) == "unverified"  # stance wasn't checked
 
 
 @pytest.mark.parametrize("spoil, message", [

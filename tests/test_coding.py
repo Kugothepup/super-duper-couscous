@@ -279,5 +279,6 @@ def test_cli_runs_every_coding_stage(batched, capsys):
     assert main(["labels", "lock", d, "--coder-model", "claude-opus-5-5"]) == 0
     write_prior(batched)
     assert main(["unseal", d]) == 0 and "after the first crp ingest" in capsys.readouterr().out
-    assert main(["agreement", "export", d, "--n", "20"]) == 0 and "20 of 100 coded items" in capsys.readouterr().out
+    assert main(["agreement", "export", d, "--n", "20", "--measurement-n", "12"]) == 0
+    assert "20 of 100 coded items (12 measurement, then 8 detail)" in capsys.readouterr().out
     assert main(["agreement", "score", d]) == 2 and "No human/human_labels.csv" in capsys.readouterr().err

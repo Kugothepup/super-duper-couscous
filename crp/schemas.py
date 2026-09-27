@@ -297,6 +297,6 @@ class Results(Strict):
     generated_at: dt.datetime
     seed: int
     codebook_version: NonEmpty | None = None
-    agreement_status: Literal["verified", "tentative", "unverified"] = "unverified"
+    agreement_status: dict[str, Literal["verified", "tentative", "unverified"]] = {}  # per variable (D25)
     alpha: dict[str, float] = {}
     measures: list[Measure] = []

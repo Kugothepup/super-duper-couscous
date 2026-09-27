@@ -1,7 +1,8 @@
 """crp agreement export / score: how far a human coder agrees with the blind coder (D5).
 
-export: a seeded random sample of coded items (default 100, or all if fewer) to
-human/agreement_sheet.csv, with the item text, the context the coder saw, and one empty
+export: a seeded random sample of 100 coded items to human/agreement_sheet.csv: 60 from the
+measurement sample and 40 from the detail selection (D25). If either has fewer, all of it goes
+in and the other fills the rest, up to 100. The sheet lists the measurement items first, with the item text, the context the coder saw, and one empty
 column per codebook variable. It never reads the AI's labels. Columns that don't apply to an
 item say n/a. human/agreement_guide.md sets out the codebook for the human coder.
 
@@ -10,7 +11,9 @@ and the locked AI labels, and computes Krippendorff's alpha per variable with th
 package: nominal or ordinal as the codebook says, values in codebook order. A variable that can
 be empty is scored twice (D25, proposed): whether it was used at all (nominal), and its value
 where both used it. So "aspect_scores (mentioned)" and "aspect_scores", and "stance (expressed)"
-and "stance". Each gets a status from the thresholds, and the study's status is the worst of them.
+and "stance". Each gets its own status from the thresholds. There is no single study-wide
+status: each section of the outputs takes the lowest status of the variables it rests on
+(section_status), and is unverified if any of them wasn't checked (D25).
 A confusion table compares the AI's and each human's `overall` codes. Writes results/agreement.json.
 """
 from __future__ import annotations
@@ -37,7 +40,8 @@ HUMAN = Path("human") / "human_labels.csv"
 REPORT = Path("results") / "agreement.json"
 AI = "ai"
 NA = "n/a"
-SAMPLE_SIZE = 100
+SAMPLE_SIZE = 100  # items on the sheet (D25)
+MEASUREMENT_ITEMS = 60  # of which from the measurement sample, if it has that many
 RANK = {"unverified": 0, "tentative": 1, "verified": 2}
 
 
@@ -92,15 +96,28 @@ def guide(codebook: Codebook) -> str:
     return "\n".join(lines)
 
 
-def export(study_dir: Path, n: int = SAMPLE_SIZE, seed: int | None = None) -> dict:
+def quotas(n: int, measurement_n: int, have_m: int, have_d: int) -> tuple[int, int]:
+    """Items from each sample: measurement_n and the rest of n, each topping up the other if it runs short."""
+    m = min(measurement_n, have_m)
+    d = min(n - m, have_d)
+    return min(n - d, have_m), d
+
+
+def export(study_dir: Path, n: int = SAMPLE_SIZE, measurement_n: int = MEASUREMENT_ITEMS,
+           seed: int | None = None) -> dict:
     study_dir = Path(study_dir)
     codebook, _ = frozen(study_dir)
     index = read_index(study_dir)
-    if n < 1:
-        raise InputError(f"The sample size must be 1 or more (got {n}).")
+    if n < 1 or not 0 <= measurement_n <= n:
+        raise InputError(f"The sheet needs 1 or more items, and 0 to {n} of them from the measurement sample "
+                         f"(got {n} and {measurement_n}).")
     seed = index["seed"] if seed is None else seed
     items = batch_texts(study_dir, index)
-    chosen = random.Random(seed).sample(sorted(items), min(n, len(items)))
+    sample_of = {it["item_id"]: b["sample"] for b in index["batches"] for it in b["items"]}
+    pools = {s: sorted(i for i in items if sample_of[i] == s) for s in ("measurement", "detail")}
+    take = dict(zip(pools, quotas(n, measurement_n, len(pools["measurement"]), len(pools["detail"]))))
+    rng = random.Random(seed)
+    chosen = [i for s, pool in pools.items() for i in rng.sample(pool, take[s])]
     cols = columns(codebook)
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
@@ -122,8 +139,10 @@ def export(study_dir: Path, n: int = SAMPLE_SIZE, seed: int | None = None) -> di
         atomic_write_text(old, sheet)
         atomic_write_text(study_dir / GUIDE, guide(codebook) + "\n")
         record["items"] = chosen
+        record["settings"] = {"n": n, "measurement_n": measurement_n}
         record["outputs"] = [str(SHEET), str(GUIDE)]
-    return {"items": len(chosen), "of": len(items), "seed": seed}
+    return {"items": len(chosen), "of": len(items), "seed": seed, "measurement": take["measurement"],
+            "detail": take["detail"]}
 
 
 # ---- reading the human codes -------------------------------------------------
@@ -291,12 +310,25 @@ def score(study_dir: Path) -> dict:
         for name, (level, n_values, data) in metrics(codebook, coded, items).items():
             r = reliability_alpha(data, n_values, level)
             results[name] = {"level": level, **r, "status": thresholds.agreement_status(r["alpha"])}
-        worst = min((r["status"] for r in results.values()), key=RANK.get, default="unverified")
         report = {"codebook_version": codebook.version, "labels_locked_at": lock["locked_at"],
                   "coder_model": lock["coder_model"], "coders": [AI] + sorted(c for c in coded if c != AI),
                   "items": len(wanted),
                   "thresholds": {"verified": thresholds.ALPHA_VERIFIED, "tentative": thresholds.ALPHA_TENTATIVE},
-                  "status": worst, "metrics": results, "confusion": confusion(codebook, coded)}
+                  "metrics": results, "confusion": confusion(codebook, coded)}
         atomic_write_text(study_dir / REPORT, json.dumps(report, indent=2) + "\n")
         record["outputs"] = [str(REPORT)]
     return report
+
+
+def section_status(report: dict | None, variables: list[str]) -> str:
+    """The status a section of the outputs shows: the lowest among the variables it rests on (both scores
+    for a variable scored twice), and unverified if agreement wasn't run or any of them wasn't checked (D5, D25)."""
+    if report is None or not variables:
+        return "unverified"
+    statuses = []
+    for v in variables:
+        found = [m["status"] for name, m in report["metrics"].items() if name.split(" (")[0] == v]
+        if not found:
+            return "unverified"
+        statuses += found
+    return min(statuses, key=RANK.get)
