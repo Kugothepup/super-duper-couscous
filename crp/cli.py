@@ -8,7 +8,9 @@ from pathlib import Path
 
 from crp.anonymise import anonymise
 from crp.ingest import ingest
+from crp import thresholds
 from crp.io import InputError, validate
+from crp.sample import sample
 from crp.scaffold import new_study
 from crp.schemas import Study
 from crp.signals import signals
@@ -108,6 +110,60 @@ def cmd_signals(args: argparse.Namespace) -> int:
         print(f"{tid}: {flags or 'no flags'}")
         for w in s["warnings"]:
             print(f"   ! {w}")
+    print("Next: crp sample")
+    return 0
+
+
+def left_out_text(left_out: dict[str, int], min_words: int) -> str:
+    words = {"promotional": "promotional", "echo_reply": "short echo replies",
+             "short": f"comments under {min_words} words", "removed_or_unknown": "removed or unattributed"}
+    return ", ".join(f"{words[k]} {n}" for k, n in left_out.items())
+
+
+def cmd_sample(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    s = sample(d, seed=args.seed, size=args.size, person_cap=args.person_cap, thread_cap_pct=args.thread_cap_pct,
+               budget=args.budget, per_person=args.per_person, min_words=args.min_words)
+    m, fr = s["measurement"], s["measurement"]["frame"]
+    how = {"given": "given", "reused": "reused from the last run", "generated": "generated"}[s["seed_source"]]
+    print(f"Seed {s['seed']} ({how}). Re-running crp sample without --seed reuses it.")
+    if not fr["eligible"]:
+        print("No forum posts to measure, so there is no measurement sample (interviews never enter it).")
+    else:
+        print(f"Measurement sample: {m['drawn']} forum posts drawn (target {m['target']}), "
+              f"written to {d}/samples/measurement.jsonl")
+        print(f"  Frame: {fr['forum_posts']} forum posts, {fr['eligible']} eligible"
+              + (f" (left out: {left_out_text(fr['left_out'], args.min_words)})" if fr["left_out"] else ""))
+        if fr["people_capped"]:
+            print(f"  Person cap {fr['person_cap']}: {fr['people_capped']} person(s) over it, {fr['posts_capped']} "
+                  f"post(s) left out at random, {fr['after_person_cap']} in the frame")
+        print(f"  Thread cap {m['thread_cap_pct']}%: at most {m['thread_cap']} post(s) from any one thread")
+        for tid, t in m["threads"].items():
+            print(f"    {tid}  eligible {t['eligible']:>3}  after person cap {t['after_person_cap']:>3}  "
+                  f"sampled {t['sampled']:>3}")
+        if m["drawn"] < min(m["target"], fr["after_person_cap"]):
+            print(f"  ! The thread cap limited the sample to {m['drawn']} posts. More threads would allow a larger one.")
+        if m["thread_cap_pct"] != thresholds.THREAD_CAP_PCT:
+            print(f"  ! The thread cap is {m['thread_cap_pct']}%, not the method's {thresholds.THREAD_CAP_PCT}%. "
+                  "Outputs will say so.")
+    det = s["detail"]
+    f = det["forum"]
+    if f:
+        if f["all_kept"]:
+            print(f"Detail selection: all {f['candidates']} forum candidates kept (within the budget of {f['budget']})")
+        else:
+            print(f"Detail selection: {f['selected']} of {f['candidates']} forum candidates "
+                  f"(budget {f['budget']}, at most {f['per_person']} comments per person)")
+            print("  First reason for selection: " + ", ".join(f"{k} {v}" for k, v in f["first_reason"].items()))
+            if f["people_at_cap"]:
+                print(f"  {f['people_at_cap']} person(s) reached the per-person cap of {f['per_person']}")
+            print(f"  Topic clusters ({f['cluster_method']}), size -> selected:")
+            for c in sorted(f["clusters"], key=lambda c: -c["size"]):
+                print(f"    {c['cluster_id']} {c['size']:>4} -> {c['selected']:<3} {', '.join(c['top_terms'][:5])}")
+    if det["interview_turns"]:
+        print(f"  Interviews are read in full: {det['interview_turns']} participant turn(s) added")
+    print(f"Written to {d}/samples/detail.jsonl (purposive: never used for percentages)")
+    print("Stop here: show Steeve the selection. If a topic cluster got few picks, re-run with a larger --budget.")
     return 0
 
 
@@ -148,6 +204,25 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--gap", type=float, default=2.0, help="response gap in seconds to flag (default 2.0)")
     p.add_argument("--sd", type=float, default=1.0, help="hesitation cluster at the speaker's mean + N SD")
     p.set_defaults(func=cmd_signals)
+
+    p = sub.add_parser("sample", help="draw the measurement sample and the detail selection",
+                       description="Draw samples/measurement.jsonl (random, capped) and samples/detail.jsonl "
+                                   "(purposive). Same seed, same samples.")
+    p.add_argument("study")
+    p.add_argument("--seed", type=int, help="random seed (default: the last run's, or a new one, logged)")
+    p.add_argument("--size", type=int, default=thresholds.MEASUREMENT_SIZE,
+                   help=f"measurement sample size (default {thresholds.MEASUREMENT_SIZE})")
+    p.add_argument("--person-cap", type=int, default=thresholds.PERSON_CAP,
+                   help=f"most posts per person in the measurement frame (default {thresholds.PERSON_CAP})")
+    p.add_argument("--thread-cap-pct", type=int, default=thresholds.THREAD_CAP_PCT,
+                   help=f"most %% of the measurement sample from one thread (default {thresholds.THREAD_CAP_PCT})")
+    p.add_argument("--budget", type=int, default=thresholds.DETAIL_BUDGET,
+                   help=f"forum posts in the detail selection (default {thresholds.DETAIL_BUDGET})")
+    p.add_argument("--per-person", type=int, default=thresholds.DETAIL_PER_PERSON,
+                   help=f"most comments per person in the detail selection (default {thresholds.DETAIL_PER_PERSON})")
+    p.add_argument("--min-words", type=int, default=thresholds.MIN_WORDS,
+                   help=f"leave out comments shorter than this (default {thresholds.MIN_WORDS})")
+    p.set_defaults(func=cmd_sample)
     return parser
 
 

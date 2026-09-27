@@ -19,7 +19,7 @@ from crp.io import InputError, atomic_write_text, sha256_file
 
 MANIFEST = Path("results") / "run_manifest.json"
 PACKAGES = ("crp", "numpy", "pandas", "pydantic", "PyYAML", "rapidfuzz", "krippendorff", "scipy",
-            "Jinja2", "scikit-learn")
+            "Jinja2", "scikit-learn", "threadpoolctl")
 
 
 def package_versions() -> dict[str, str | None]:

@@ -146,6 +146,26 @@ class Post(_PostBase):
     person_code: PersonCode
 
 
+# ---- samples -----------------------------------------------------------------
+
+class MeasurementItem(Strict):
+    """One row of samples/measurement.jsonl: a forum post in the random sample. Only these feed percentages."""
+    post_id: NonEmpty
+    thread_id: NonEmpty
+    person_code: PersonCode
+    selection: Literal["random"] = "random"
+
+
+class DetailItem(Strict):
+    """One row of samples/detail.jsonl: a post chosen on purpose for close reading. Never used for percentages."""
+    post_id: NonEmpty
+    thread_id: NonEmpty
+    person_code: PersonCode
+    source_type: Literal["forum", "interview"]
+    selection: Literal["purposive"] = "purposive"
+    reasons: list[NonEmpty] = Field(min_length=1)
+
+
 # ---- codebook and labels -----------------------------------------------------
 
 class Variable(Strict):

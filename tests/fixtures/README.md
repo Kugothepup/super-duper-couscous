@@ -34,3 +34,5 @@
 | Bot comment removed | 1, from T03 |
 | Interview | I01: 8 turns, 4 by the interviewer and 4 by the participant; the interviewer is found by the question-ratio heuristic |
 | Transcription checks | T01: 9 exact and 1 normalised; T04: 7 unverified without OCR |
+| Measurement frame | 68 eligible forum posts: the promotional post and the echo reply are left out |
+| Thread cap | Only 4 threads, so the default 10% cap stops `crp sample` (D22); tests loosen it to 30% |
