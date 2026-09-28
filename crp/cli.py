@@ -10,6 +10,8 @@ from crp.anonymise import anonymise
 from crp.ingest import ingest
 from crp import agreement, labels, thresholds
 from crp.analyse import analyse
+from crp.build import build
+from crp.numbers import check_numbers
 from crp import synthesis, themes as themes_mod, view as view_mod
 from crp.codebook import frozen
 from crp.io import read_jsonl
@@ -378,6 +380,29 @@ def cmd_view(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    out = build(d, shareable=args.shareable)
+    kind = "Shareable build (no quotes, thread titles or person codes)" if out["shareable"] else \
+        "Internal build (quotes posts: don't share it; use --shareable)"
+    print(f"{kind}:\n  {out['dashboard']}\n  {out['report']}")
+    print("Next: crp check-numbers")
+    return 0
+
+
+def cmd_check_numbers(args: argparse.Namespace) -> int:
+    rep = check_numbers(study_dir(args.study))
+    print("Checked: " + ", ".join(rep["files"]))
+    for p in rep["problems"]:
+        print(f"UNTRACED {p}")
+    if rep["ok"]:
+        print("Every number traces to results.json, the study's own text, a stated constant or the post it cites.")
+        return 0
+    print(f"{len(rep['problems'])} number(s) don't trace to results.json. Replace each with a placeholder such as "
+          "{{ headline.negative.pct }}, or write non-data quantities in words, then build again.")
+    return 1
+
+
 def stats_min() -> int:
     from crp.stats import MIN_MENTIONS
     return MIN_MENTIONS
@@ -490,6 +515,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, help="seed for the re-draws (default: the sample's)")
     p.add_argument("--draws", type=int, default=5000, help="bootstrap re-draws (default 5000)")
     p.set_defaults(func=cmd_analyse)
+
+    p = sub.add_parser("build", help="the dashboard and report, filled from results.json")
+    p.add_argument("study")
+    p.add_argument("--shareable", action="store_true", help="leave out quotes, thread titles and person codes")
+    p.set_defaults(func=cmd_build)
+
+    p = sub.add_parser("check-numbers", help="fail if any number shown doesn't trace to results.json")
+    p.add_argument("study")
+    p.set_defaults(func=cmd_check_numbers)
 
     p = sub.add_parser("validate", help="check the synthesis files in synthesis/")
     p.add_argument("study")

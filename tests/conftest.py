@@ -91,7 +91,7 @@ def write_synthesis(d: Path, hypotheses: list | None = None) -> list[str]:
     posts = {p["post_id"]: p for p in map(json.loads, (d / "posts.jsonl").read_text().splitlines())}
     ids = [i["post_id"] for i in detail if i["source_type"] == "forum"][:14]
     (d / "synthesis").mkdir(exist_ok=True)
-    obs = [{"post_id": pid, "observation": f"Placeholder observation {n}.",
+    obs = [{"post_id": pid, "observation": f"Placeholder observation {chr(97 + n)}.",
             "quote": " ".join(posts[pid]["text"].split()[:8]),
             "tags": ["trial"] + (["product:paper"] if n % 4 == 0 else []) + (["question"] if n % 5 == 0 else [])}
            for n, pid in enumerate(ids)]

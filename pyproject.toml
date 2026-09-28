@@ -28,5 +28,8 @@ ocr = ["pytesseract==0.3.13", "Pillow==12.3.0"]
 [tool.setuptools]
 packages = ["crp"]
 
+[tool.setuptools.package-data]
+crp = ["templates/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -19,7 +19,7 @@ from crp.io import InputError, atomic_write_text, read_jsonl, read_yaml, sha256_
 from crp.keyness import METHOD as KEYNESS_METHOD
 from crp.keyness import keyness
 from crp.labels import LABELS_LOCK, labelled, locked
-from crp.sample import MEASUREMENT, SUMMARY, candidates, load_measurement
+from crp.sample import MEASUREMENT, SUMMARY, candidates, load_detail, load_measurement
 from crp.schemas import Codebook, Post, Results, Study
 from crp.sensitivity import cap_weights, leave_one_out, without_caps
 from crp.signals import SIGNALS
@@ -89,8 +89,84 @@ def agreement(study_dir: Path, lock: dict, codebook: Codebook) -> tuple[dict, di
     rep = json.loads(path.read_text(encoding="utf-8"))
     if rep.get("labels_locked_at") != lock["locked_at"] or rep.get("codebook_version") != codebook.version:
         return {}, {}, "results/agreement.json is from other labels or another codebook version, so it's ignored."
-    return ({k: m["status"] for k, m in rep["metrics"].items()}, {k: m["alpha"] for k, m in rep["metrics"].items()},
-            None)
+    return ({k: m["status"] for k, m in rep["metrics"].items()},
+            {k: None if m["alpha"] is None else round(m["alpha"], 3) for k, m in rep["metrics"].items()}, None)
+
+
+def thread_flags(study_dir: Path, posts: list[Post]) -> dict[str, dict[str, int]]:
+    """Signal flag counts per forum thread, from crp signals' summary."""
+    path = study_dir / "results" / "signals_summary.json"
+    if not path.exists():
+        return {}
+    forum = {p.thread_id for p in posts if p.source_type == "forum"}
+    return {tid: {k: v for k, v in s["flag_counts"].items() if k != "hesitation_cluster" and k != "long_response_gap"}
+            for tid, s in json.loads(path.read_text(encoding="utf-8")).items() if tid in forum}
+
+
+def collection_summary(study_dir: Path, posts: list[Post], summary: dict) -> dict:
+    """How the material was found and checked: counts from the posts, the collection log, crp ingest,
+    crp verify and crp sample, so the trust section shows only numbers in results.json."""
+    from crp.io import read_csv
+    from crp.schemas import COLLECTION_LOG_COLUMNS, CollectionLogRow
+    forum = [p for p in posts if p.source_type == "forum"]
+    log_path = study_dir / "collection_log.csv"
+    log = read_csv(log_path, CollectionLogRow, COLLECTION_LOG_COLUMNS) if log_path.exists() else []
+    sources = []
+    for src in dict.fromkeys(p.source for p in forum):
+        ps = [p for p in forum if p.source == src]
+        sources.append({"source": src, "threads": len({p.thread_id for p in ps}), "posts": len(ps),
+                        "capture": sorted({p.capture_method for p in ps}),
+                        "search_terms": sorted({p.search_term for p in ps if p.search_term}),
+                        "searches_logged": sum(r.source == src for r in log)})
+    out: dict = {"forum_posts": len(forum), "forum_people": len({p.person_code for p in forum if p.role == "participant"}),
+                 "forum_threads": len({p.thread_id for p in forum}),
+                 "interview_turns": sum(p.source_type == "interview" for p in posts), "sources": sources}
+    times = sorted(p.timestamp.date() for p in forum if p.timestamp)
+    if times:
+        out["window"] = (times[0], times[-1])
+    if log:
+        seen = [r.results_seen for r in log if r.results_seen is not None]
+        kept = [r.kept for r in log if r.kept is not None]
+        out["searches"] = {"logged": len(log), "neutral": sum(r.neutral for r in log),
+                           "results_seen": sum(seen) if seen else None, "kept": sum(kept) if kept else None,
+                           "kept_nothing": sum(r.kept == 0 for r in log)}
+    verify_path, ingest_path = study_dir / "results" / "verify_report.json", study_dir / "results" / "ingest_report.json"
+    if verify_path.exists():
+        out["transcription"] = json.loads(verify_path.read_text(encoding="utf-8"))["counts"]
+    if ingest_path.exists():
+        rep = json.loads(ingest_path.read_text(encoding="utf-8"))
+        cap, red = rep.get("captures", {}), rep.get("reddit", {})
+        out["ingest"] = {"duplicates_dropped": sum((cap.get("duplicates_dropped") or {}).values()),
+                         "promotional_flagged": cap.get("promotional_flagged", 0), "bots_removed": red.get("bots_removed", 0)}
+    d = summary["detail"]
+    if d.get("forum"):
+        f = d["forum"]
+        out["detail"] = {"candidates": f["candidates"], "selected": f["selected"], "budget": f["budget"],
+                         "per_person": f["per_person"], "all_kept": f["all_kept"],
+                         "echo_replies": summary["measurement"]["frame"]["left_out"].get("echo_reply", 0),
+                         "interview_turns": d["interview_turns"]}
+    return out
+
+
+def themes_summary(study_dir: Path, checked: dict | None) -> dict | None:
+    """results/themes.json, with each cluster linked to the insights that draw on it (build_report.py)."""
+    from crp.themes import THEMES
+    path = study_dir / THEMES
+    if not path.exists():
+        return None
+    t = json.loads(path.read_text(encoding="utf-8"))
+    insights = checked["files"]["insights"] if checked else []
+    clusters, gaps = [], []
+    for c in t["clusters"]:
+        members = set(c["members"])
+        linked = sorted(i.id for i in insights if members & set(i.post_ids))
+        clusters.append({"cluster_id": c["cluster_id"], "size": c["size"], "coverage": c["coverage"],
+                         "top_terms": c["top_terms"][:5], "dominated": c["dominated_by"] is not None,
+                         "linked_insights": linked, "representative": c["representative"]})
+        if not linked and c["coverage"] >= 5:
+            gaps.append(c["cluster_id"])
+    return {"source": t["source"], "method": t["method"], "silhouette": t["silhouette"], "n_items": t["n_items"],
+            "clusters": clusters, "gaps": gaps}
 
 
 def min_words(study_dir: Path, measurement: dict) -> int:
@@ -143,7 +219,10 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
                        (study_dir / SIGNALS).read_text(encoding="utf-8").splitlines() if line.strip())}
         forum_said = [p for p in posts if p.source_type == "forum" and p.role == "participant"]
         data["language"] = {"phrases": language.phrases([(p.text, p.person_code) for p in forum_said]),
-                            "signal_rates": language.signal_rates(posts, signal_rows)}
+                            "signal_rates": language.signal_rates(posts, signal_rows),
+                            "threads": thread_flags(study_dir, posts)}
+        data["collection"] = collection_summary(study_dir, posts, summary)
+        data["themes"] = themes_summary(study_dir, checked)
         if records:
             eng = Engine(records, draws, seed)
             data["headline"] = stats.headline(eng)
@@ -167,7 +246,9 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
         warnings = checked["warnings"] if checked else []
         if checked:
             neg_rate = {a["aspect"]: a["negative_rate"].get("pct") for a in data.get("aspects", [])}
-            data["synthesis"] = synthesis.summarise(checked, neg_rate, codebook)
+            detail_posts = [post for _, post in load_detail(study_dir)]
+            data["synthesis"] = synthesis.summarise(checked, neg_rate, codebook, data.get("drivers", [])[:3],
+                                                    detail_posts, {k: v["flags"] for k, v in signal_rows.items()})
             if checked["files"]["hypotheses"]:
                 scored = hypotheses.score(checked["files"]["hypotheses"], checked["nuggets"], eng, len(records),
                                           n_people, draws, seed)

@@ -631,6 +631,11 @@ class FrameResult(Reach):
 
 class SynthesisResult(Strict):
     observations: int
+    forces: dict[str, Reach] = {}
+    tag_pairs: list[TagPair] = []
+    driver_evidence: dict[str, list[str]] = {}  # top drivers -> observed posts that explain them
+    unexplained_drivers: list[str] = []
+    unexamined: list[str] = []  # flagged detail posts with no observation (up to 12)
     evidence_mix: dict[str, int] = {}
     insights: list[InsightResult] = []
     pains: list[AspectGroup] = []
@@ -674,6 +679,73 @@ class Phrase(Strict):
 class LanguageResult(Strict):
     phrases: list[Phrase] = []
     signal_rates: dict[str, Share] = {}
+    threads: dict[str, dict[str, int]] = {}  # signal flag counts per forum thread
+
+
+class SourceCount(Strict):
+    source: NonEmpty
+    threads: int
+    posts: int
+    capture: list[str] = []
+    search_terms: list[str] = []
+    searches_logged: int = 0
+
+
+class SearchLog(Strict):
+    logged: int
+    neutral: int
+    results_seen: int | None = None
+    kept: int | None = None
+    kept_nothing: int
+
+
+class DetailSummary(Strict):
+    candidates: int
+    selected: int
+    budget: int
+    per_person: int
+    all_kept: bool
+    echo_replies: int
+    interview_turns: int
+
+
+class CollectionSummary(Strict):
+    """How the material was found and checked, for the trust section. Counts only."""
+    forum_posts: int
+    forum_people: int
+    forum_threads: int
+    interview_turns: int
+    window: tuple[dt.date, dt.date] | None = None
+    sources: list[SourceCount] = []
+    searches: SearchLog | None = None
+    transcription: dict[str, int] = {}  # crp verify statuses
+    ingest: dict[str, int] = {}  # duplicates dropped, promotional posts flagged, bot comments removed
+    detail: DetailSummary | None = None
+
+
+class ThemeCluster(Strict):
+    cluster_id: NonEmpty
+    size: int
+    coverage: int
+    top_terms: list[str]
+    dominated: bool
+    linked_insights: list[str] = []
+    representative: list[str] = []
+
+
+class ThemesSummary(Strict):
+    source: NonEmpty
+    method: NonEmpty
+    silhouette: float
+    n_items: int
+    clusters: list[ThemeCluster] = []
+    gaps: list[str] = []  # wide clusters (5+ people) no insight draws on
+
+
+class TagPair(Strict):
+    a: NonEmpty
+    b: NonEmpty
+    n: int
 
 
 class Results(Strict):
@@ -701,5 +773,7 @@ class Results(Strict):
     interviews: Interviews | None = None
     keyness: Keyness | None = None
     language: LanguageResult | None = None
+    collection: CollectionSummary | None = None
+    themes: ThemesSummary | None = None
     synthesis: SynthesisResult | None = None
     hypotheses: list[HypothesisResult] = []

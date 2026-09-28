@@ -1,0 +1,231 @@
+{#- The written report. Every number is a value from results.json. Ported from build_report.py (Outlook removed, D1).
+    Each evidence line names its post, so crp check-numbers can tell a post's own numbers from typed ones. -#}
+{%- macro share(sh) -%}{% if sh is none %}—{% elif sh.status == "counts-only" %}{{ sh.k }} of {{ sh.n }}{% else %}{{ sh.pct }}%{% endif %}{%- endmacro -%}
+{%- macro likely(sh) -%}{% if sh is not none and sh.range %} (likely {{ sh.range[0] }}–{{ sh.range[1] }}% within this collection){% endif %}{%- endmacro -%}
+{%- macro evline(pid) -%}{% set e = ev(pid) %}> {% if e.quote %}"{{ e.quote }}" — {% endif %}_{{ e.obs or "no observation" }}_ ({{ e.id }}{% if e.who %}, {{ e.who }}{% endif %}{% if e.score is not none %}, ^{{ e.score }}{% endif %}{% if e.ev %}, {{ e.ev|label }}{% endif %})
+{%- endmacro -%}
+{%- macro vline(id) -%}{% set b = banner(id) %}{% if b %}_{{ b.text }}_{% endif %}{%- endmacro -%}
+{%- set h = r.headline -%}{%- set syn = r.synthesis -%}{%- set col = r.collection or {} -%}
+# {{ study.subject }}
+
+{% if col %}{{ col.forum_threads }} forum threads ({{ sources|join(", ") }}) · {{ col.forum_posts }} posts from {{ col.forum_people }} people{% if col.detail %} · {{ col.detail.selected }} read in detail{% endif %}{% if syn %} · {{ syn.observations }} observations · {{ syn.insights|length }} insights{% endif %}{% if r.interviews %} · interviews counted apart: {{ r.interviews.transcripts }} transcript(s), {{ r.interviews.participants }} participant(s){% endif %}{% endif %}
+
+{{ vline("verdict") }}
+
+{% if prose %}
+## Summary
+
+{{ prose }}
+
+{% endif %}
+## Sentiment and what drives it
+
+{% if not h %}
+_No coded measurement sample yet._
+{% else %}
+**{{ verdict }}.**{% if h.negative.status != "counts-only" %} {{ h.negative.pct }}% of sampled comments were negative{{ likely(h.negative) }} and {{ h.positive.pct }}% positive.{% else %} {{ h.negative.k }} of {{ h.negative.n }} sampled comments were negative and {{ h.positive.k }} positive: counts only, as fewer than {{ thresholds.MIN_PEOPLE_FOR_RANGES }} people posted them.{% endif %}
+
+{% if safe %}> **Safe wording for a deck:** {{ safe }}
+> {{ population_note }}
+{% endif %}
+
+Measured on a random sample of {{ r.sample.n_items }} comments from {{ r.sample.n_people }} people, drawn from {{ r.sample.eligible }} eligible posts (at most {{ r.sample.person_cap }} per person, no thread above {{ r.sample.thread_cap_pct }}% of the sample).{% if h.people_net_negative.status != "counts-only" %} By person rather than by comment, {{ h.people_net_negative.pct }}% of the people sampled lean negative{{ likely(h.people_net_negative) }}.{% endif %}
+
+{% set by = {} %}{% for a in r.aspects %}{% set _ = by.update({a.aspect: a}) %}{% endfor %}
+{% if r.drivers %}
+{{ vline("drivers") }}
+
+| Driver | Share of negative mentions | How often negative when raised | People | Mean (−2 to +2) | Top driver in re-draws |
+|---|---|---|---|---|---|
+{% for name in r.drivers[:8] %}{% set a = by[name] %}| {{ name }} | {{ share(a.share_of_negative) }}{{ likely(a.share_of_negative) }} | {{ share(a.negative_rate) }} | {{ a.people }} | {{ a.mean if a.mean is not none else "—" }} | {{ (a.top_driver.pct ~ "%") if a.top_driver else "—" }} |
+{% endfor %}
+
+{% endif %}
+{% if r.strengths %}**What people value:** {% for name in r.strengths[:4] %}{{ name }} ({{ share(by[name].share_of_positive) }} of positive mentions){% if not loop.last %}, {% endif %}{% endfor %}.
+
+{% endif %}
+{% if syn and syn.driver_evidence %}**Why these drive negativity** (from coded posts):
+
+{% for asp, ids in syn.driver_evidence.items() %}- **{{ asp }}:**
+{% for pid in ids %}  {{ evline(pid) }}
+{% endfor %}{% endfor %}
+
+{% endif %}
+{% if syn and syn.unexplained_drivers %}⚠ No coded post yet explains: {{ syn.unexplained_drivers|join(", ") }}. Read posts on these (crp view kwic) before drawing conclusions.
+
+{% endif %}
+{% set sens = r.sensitivity %}{% if sens %}**How much one source matters.** {% if sens.min_pct is not none %}Leaving out one source, search term or large thread at a time gives {{ sens.min_pct }}–{{ sens.max_pct }}% negative over {{ sens.removals_with_pct }} such checks{% if sens.most_moved %}; leaving out {{ sens.most_moved.kind|label }} {{ sens.most_moved.removed }} moved it most ({{ "%+g"|format(sens.most_moved.change_pts) }} points){% endif %}.{% else %}Too few people are left after each removal for a percentage.{% endif %}{% if sens.without_caps and sens.without_caps.pct is not none %} Without the person and thread caps, an estimated {{ sens.without_caps.pct }}% of comments were negative.{% endif %}
+
+{% endif %}
+### Direction of travel
+
+{% set dr = r.direction %}{% if dr and dr.status == "ok" %}Across the {{ dr.unit }}s sampled, the share of negative comments shows **{{ dr.trend.verdict if dr.trend else "insufficient data" }}** (only periods with enough comments are compared).
+
+| {{ dr.unit|capitalize }} | Sampled | Negative | Top aspects | Switching talk |
+|---|---|---|---|---|
+{% for pr in dr.periods %}| {{ pr.period }} | {{ pr.negative.n }} | {{ share(pr.negative) }} | {{ pr.top_aspects.keys()|list|join(", ") }} | {% set sw = dr.switching.get(pr.period) %}{{ share(sw) if sw else "—" }} |
+{% endfor %}
+{% else %}{{ dr.note if dr and dr.note else "No timestamps, so direction can't be assessed." }}
+{% endif %}
+
+{% set evt = r.event %}{% if evt %}### Before and after {{ evt.date }}
+
+| Measure | Before | After | Change | Verdict |
+|---|---|---|---|---|
+{% for m in evt.measures %}| {{ {"negative": "Negative comments", "in_favour": "Comments for the proposition"}.get(m.measure, m.measure) }} | {{ share(m.before) }}{% if m.before.pct is not none %} ({{ m.before.n }}){% endif %} | {{ share(m.after) }}{% if m.after.pct is not none %} ({{ m.after.n }}){% endif %} | {% if m.diff_pts is not none %}{{ "%+g"|format(m.diff_pts) }} points{% if m.range %} ({{ m.range[0] }} to {{ m.range[1] }}){% endif %}{% else %}—{% endif %} | {{ m.verdict }} |
+{% endfor %}
+
+{% for c in evt.aspect_shifts %}- {{ c.measure }} {{ c.verdict }} from {{ share(c.before) }} to {{ share(c.after) }} of comments
+{% endfor %}
+{{ evt.note }}
+
+{% endif %}
+{% endif %}
+{% if r.stance %}{% set st = r.stance %}
+## Where people stand
+
+{{ vline("stance") }}
+
+On "{{ st.target }}": {{ share(st.in_favour) }} for{{ likely(st.in_favour) }} and {{ share(st.against) }} against{{ likely(st.against) }}, of the {{ st.in_favour.n }} sampled comments that took a position.
+
+{% endif %}
+## Insights
+
+{{ vline("themes") }}
+
+{% if not syn or not syn.insights %}_No insights yet._
+{% endif %}
+{% for conf in ["high", "medium", "low"] %}{% for i in (syn.insights if syn else [])|selectattr("confidence", "equalto", conf) %}{% set ins = insights[i.id] %}
+### {{ i.id }}. {{ ins.statement }}
+
+**Confidence:** {{ i.confidence }} · **People:** {{ i.voices }}{% if i.interview_participants %} ({{ i.interview_participants }} from interviews){% endif %} · **Strong evidence:** {{ i.strong }} of {{ i.n }} posts{% if i.voices == 1 %} · ⚠ one person{% endif %}
+
+{% for pid in i.post_ids[:3] %}{{ evline(pid) }}
+
+{% endfor %}
+{% if i.counter_post_ids %}**Counter-evidence ({{ i.counter_n }}):**
+
+{% for pid in i.counter_post_ids[:2] %}{{ evline(pid) }}
+
+{% endfor %}{% endif %}
+{% for x in ins.recommendations %}- **Recommendation:** {{ x }}
+{% endfor %}
+
+{% endfor %}{% endfor %}
+{% if syn and syn.forces %}
+## Forces of progress (JTBD)
+
+{{ vline("jobs") }}
+
+| Force | Posts | People |
+|---|---|---|
+{% for f in ["push", "pull", "anxiety", "habit"] %}| {{ force_label[f] }} | {{ syn.forces[f].n }} | {{ syn.forces[f].voices }} |
+{% endfor %}
+
+{% for j in syn.jobs %}**{{ j.id }}.** {{ jobs[j.id].job }} (push {{ j.forces.push }}, pull {{ j.forces.pull }}, anxiety {{ j.forces.anxiety }}, habit {{ j.forces.habit }}; {{ j.voices }} people)
+
+{% endfor %}
+{% endif %}
+{% if syn and (syn.tag_pairs or syn.products) %}
+## Connections
+
+{% if syn.tag_pairs %}Tags that keep appearing together (edge = observations sharing both):
+
+```mermaid
+graph LR
+{% for t in syn.tag_pairs %}  t_{{ t.a|replace(" ", "_")|replace(":", "_") }}["{{ t.a }}"] ---|{{ t.n }}| t_{{ t.b|replace(" ", "_")|replace(":", "_") }}["{{ t.b }}"]
+{% endfor %}
+```
+
+{% endif %}
+{% if syn.products %}**Products and alternatives mentioned** (by force of the posts that mention them):
+
+| Product | Posts | People | Push | Pull | Anxiety | Habit |
+|---|---|---|---|---|---|---|
+{% for p in syn.products %}| {{ p.name }} | {{ p.n }} | {{ p.voices }} | {{ p.push }} | {{ p.pull }} | {{ p.anxiety }} | {{ p.habit }} |
+{% endfor %}
+
+{% endif %}
+{% endif %}
+## Friction points
+
+{{ vline("pains") }}
+
+{% if friction %}{% for pid in friction %}{% set e = ev(pid) %}**Severity {{ e.sev }}:**
+
+{{ evline(pid) }}
+
+{% endfor %}{% else %}_No friction coded._
+{% endif %}
+{% if r.interviews %}{% set iv = r.interviews %}
+## Interviews
+
+Counted on their own and never pooled with forum figures: {{ iv.transcripts }} transcript(s), {{ iv.participants }} participant(s), {{ iv.coded_turns }} of {{ iv.turns }} participant turns coded.
+
+{% for var, counts in iv.codes.items() %}- {{ var|label }}: {% for k, v in counts.items() %}{{ k|label }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}
+{% endfor %}
+
+{% endif %}
+## Language signals
+
+Keyword-based flags in written posts: pointers for reading, not measurements.
+
+{% if r.language and r.language.threads %}| Thread | Constraint | Requests | Workarounds | Switching | High engagement |
+|---|---|---|---|---|---|
+{% for tid, fc in r.language.threads.items() %}| {{ tid }}{% if titles.get(tid) %}: {{ titles[tid] }}{% endif %} | {{ fc.constraint_language }} | {{ fc.implicit_request }} | {{ fc.workaround_language }} | {{ fc.switching_language }} | {{ fc.high_engagement }} |
+{% endfor %}
+
+{% endif %}
+{% if syn and syn.unexamined %}### Flagged posts with no observation (worth a human look)
+
+{% for pid in syn.unexamined %}- **{{ pid }}**{% if not shareable %}: {{ ev(pid).quote }}{% endif %}
+{% endfor %}
+
+{% endif %}
+{% if r.themes %}{% set t = r.themes %}
+## Clusters
+
+Clustered {{ t.n_items }} {{ t.source }} with {{ t.method }} (silhouette {{ t.silhouette }}). A second opinion on the synthesis, not a replacement.
+
+| Cluster | Size | People | Top terms | Linked insights |
+|---|---|---|---|---|
+{% for c in t.clusters %}| {{ c.cluster_id }} | {{ c.size }} | {{ c.coverage }}{% if c.dominated %} (mostly one person){% endif %} | {{ c.top_terms|join(", ") }} | {{ c.linked_insights|join(", ") or "—" }} |
+{% endfor %}
+
+{% if t.gaps %}**Possible synthesis gaps:** wide clusters no insight draws on: {{ t.gaps|join(", ") }}.
+
+{% endif %}
+{% endif %}
+{% if r.hypotheses %}
+## Hypotheses for discovery
+
+{{ vline("hypotheses") }}
+
+Starting points for proper research. These findings can suggest and prioritise hypotheses, not prove them; ones suggested by this data are not tested by it.
+
+{% for hr in r.hypotheses %}{% set hy = hypotheses[hr.id] %}
+### {{ hr.id }}: {{ hy.statement }}
+
+_{{ "Your belief, from the sealed prior" if hr.origin == "stated" else "Suggested by this data" }}, {{ hr.importance }} importance._ **{{ hr.lean|capitalize }}**{% if hr.lean != "can't tell from this data" %}, {{ hr.strength }} evidence{% endif %} ({{ hr.voices }} people). **Priority: {{ hr.priority }}.**
+
+{% for g in hr.signals %}{% set sg = hy.signals[loop.index0] %}- {{ sg.text }}: {% if g.probability %}{{ g.probability.pct }}% of re-draws{% elif g.share %}{{ g.share.k }} of {{ g.share.n }} people{% if g.share.range %} (likely {{ g.share.range[0] }}–{{ g.share.range[1] }}%){% endif %}{% elif g.kind == "voices" %}{{ g.voices_for }} for, {{ g.voices_against }} against{% endif %}{% if g.note %} ({{ g.note }}){% endif %} ({{ g.lean }})
+{% endfor %}
+
+**Test it:** {{ hy.next_step.method }}{% if hy.next_step.recruit %} Recruit: {{ hy.next_step.recruit }}.{% endif %}
+
+Would support it: {{ hy.next_step.confirm }}. Would count against it: {{ hy.next_step.disconfirm }}.
+{% if hy.next_step.questions %}
+Starting questions: {{ hy.next_step.questions|join(" / ") }}
+{% endif %}
+
+{% endfor %}
+{% endif %}
+## Method and caveats
+
+- {% if col.detail %}{% if col.detail.all_kept %}All {{ col.detail.candidates }} substantive posts were read in detail{% else %}{{ col.detail.selected }} of {{ col.detail.candidates }} substantive posts were chosen by code for detailed reading (every opening post, top-scored, signal-flagged, and a spread across topic clusters; at most {{ col.detail.per_person }} per person){% endif %}. Short agree or disagree replies counted as echoes rather than read: {{ col.detail.echo_replies }}.{% else %}No detail selection yet.{% endif %}
+
+- Sentiment figures come from a separate random sample, because the posts chosen for detailed reading deliberately over-represent complaints. The sample was coded blind by an AI coder and checked against a human: {% if r.agreement_status %}{% for k, v in r.agreement_status.items() %}{{ k }} {{ v }}{% if r.alpha[k] is not none %} ({{ r.alpha[k] }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}not checked yet, so every figure is unverified{% endif %}.
+- Ranges come from {{ r.bootstrap_draws }} re-draws resampling people and threads, the wider shown. They describe this collection, not a wider population.
+- Forum posters are self-selected and skew towards people with strong feelings, often complaints. Treat findings as what an engaged, vocal group says, not what all users think.
+- People are counted, so one prolific poster counts once.
+- Ethics: posts are public but written for a community, not for research. {{ "This version leaves out quotes, thread titles and person codes." if shareable else "This internal version quotes posts; share only the --shareable build." }}

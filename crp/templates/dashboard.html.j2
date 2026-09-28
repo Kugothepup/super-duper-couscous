@@ -1,0 +1,296 @@
+{#- The study dashboard. Every number is a value from results.json; the script at the end only handles
+    focus, copying and the colour theme. Ported from build_dashboard.py and dashboard.js (Outlook removed, D1). -#}
+{%- set T = dict(sections) -%}
+{%- macro share(sh) -%}{% if sh is none %}—{% elif sh.status == "counts-only" %}{{ sh.k }} of {{ sh.n }}{% else %}{{ sh.pct }}%{% endif %}{%- endmacro -%}
+{%- macro likely(sh) -%}{% if sh is not none and sh.range %} (likely {{ sh.range[0] }}–{{ sh.range[1] }}% within this collection){% endif %}{%- endmacro -%}
+{%- macro aspbtn(a) -%}<button type="button" class="asp" data-focus="{{ a }}">{{ a }}</button>{%- endmacro -%}
+{%- macro evlist(ids, label) -%}{% if ids %}<details><summary>{{ label }}</summary><ul class="ev">
+{%- for pid in ids %}{% set e = ev(pid) %}<li data-post="{{ e.id }}">{{ e.obs }} <span class="tag">{{ e.id }}{% if e.aspect %}, {{ e.aspect }}{% endif %}{% if e.ev %}, {{ e.ev|label }}{% endif %}{% if e.score is not none %}, ^{{ e.score }}{% endif %}</span>{% if e.quote %}<q>{{ e.quote }}</q>{% endif %}</li>{% endfor -%}
+</ul></details>{% endif %}{%- endmacro -%}
+{%- macro vbanner(id) -%}{% set b = banner(id) %}{% if b %}<p class="vbanner v-{{ b.status }}">{{ b.text }}</p>{% endif %}{%- endmacro -%}
+{%- macro empty(msg) -%}<div class="empty">{{ msg }}</div>{%- endmacro -%}
+{%- set h = r.headline -%}{%- set syn = r.synthesis -%}{%- set col = r.collection or {} -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ study.subject }}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+{% include "dashboard.css" %}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="rail" id="rail" aria-label="Sections">{% for id, title in sections %}<a href="#{{ id }}">{{ title }}</a>{% endfor %}</nav>
+<main id="main">
+<div class="focusbar" id="focusbar" role="status"><span id="focustext"></span><button type="button" id="clearFocus">Show everything</button></div>
+
+{#- ---------- verdict ---------- #}
+<header class="verdict" id="verdict">
+  <div class="topline"><p class="subject">{{ lens.label }}: {{ study.subject }}. {{ sources|join(', ') }}{% if col.window %}, {{ col.window[0] }} to {{ col.window[1] }}{% endif %}</p><button class="theme-t" id="themeT" type="button">Light or dark</button></div>
+  {{ vbanner("verdict") }}
+  <h1>{{ verdict }}</h1>
+  {% if study.stance_target %}<p class="proposition">On the proposition: {{ study.stance_target }}</p>{% endif %}
+  {% if h %}{% set n = h.negative %}{% set u = h.neutral %}{% set p = h.positive %}
+  {% if lens.stance %}<h3 style="margin:0 0 6px">Tone of discussion</h3>{% endif %}
+  {% if n.status != "counts-only" %}
+  <div class="strip" role="img" aria-label="{{ n.pct }}% negative{{ likely(n) }}; {{ u.pct }}% neutral; {{ p.pct }}% positive">
+    <div class="bar"><span class="n" style="flex-basis:{{ n.pct }}%"></span><span class="u" style="flex-basis:{{ u.pct }}%"></span><span class="p" style="flex-basis:{{ p.pct }}%"></span></div>
+    {% if n.range %}<div class="ci" style="left:{{ n.range[0] }}%;width:{{ [0.5, n.range[1] - n.range[0]]|max }}%"></div>{% endif %}
+    {% if p.range %}<div class="ci" style="left:{{ 100 - p.range[1] }}%;width:{{ [0.5, p.range[1] - p.range[0]]|max }}%"></div>{% endif %}
+    <div class="legend"><span><i style="background:var(--neg)"></i>Negative {{ n.pct }}%{{ likely(n) }}</span><span><i style="background:var(--neu)"></i>Neutral {{ u.pct }}%</span><span><i style="background:var(--pos)"></i>Positive {{ p.pct }}%{{ likely(p) }}</span></div>
+  </div>
+  {% set sens = r.sensitivity %}
+  {% if sens and sens.min_pct is not none %}<p class="loo">Leaving out any one source, search term or large thread: {{ sens.min_pct }}–{{ sens.max_pct }}% negative.{% if sens.without_caps and sens.without_caps.pct is not none %} Without the caps (estimated): {{ sens.without_caps.pct }}%.{% endif %}</p>{% endif %}
+  {% else %}
+  <p class="loo">Negative: {{ n.k }} of {{ n.n }} sampled comments; positive: {{ p.k }} of {{ p.n }}. Fewer than {{ thresholds.MIN_PEOPLE_FOR_RANGES }} people, so counts only.</p>
+  {% endif %}{% endif %}
+  <ul class="facts">
+    {% if col %}<li><b>{{ col.forum_people }}</b>people</li><li><b>{{ col.forum_posts }}</b>posts and comments</li>{% endif %}
+    {% if h %}<li><b>{{ h.negative.n }}</b>sampled for sentiment</li>{% endif %}
+    {% if col.detail %}<li><b>{{ col.detail.selected }}</b>read in detail</li>{% endif %}
+    <li><b>{% if r.direction and r.direction.status == "ok" %}{{ (r.direction.trend.verdict if r.direction.trend else "insufficient data")|capitalize }}{% else %}Snapshot only{% endif %}</b>direction</li>
+    {% if study.event_date %}<li><b>{{ study.event_date }}</b>event date</li>{% endif %}
+  </ul>
+  {% set notes = [] %}
+  {% if h and h.negative.status == "early-signal" %}{% set _ = notes.append("Small sample (" ~ h.negative.n ~ " comments): percentages are rough, so lean on the ranges.") %}{% endif %}
+  {% if r.sample.thread_cap_loosened %}{% set _ = notes.append("The thread cap was loosened to " ~ r.sample.thread_cap_pct ~ "% (the method's is " ~ thresholds.THREAD_CAP_PCT ~ "%), so one thread can weigh more.") %}{% endif %}
+  {% if r.dominant_source %}{% set _ = notes.append("Most of the sample comes from " ~ r.dominant_source ~ ", so overall figures mostly reflect it. See the split by source.") %}{% endif %}
+  {% if notes %}<p class="caution">{{ notes|join(" ") }}</p>{% endif %}
+  {% if safe %}<div class="safe"><p class="safe-h">Safe wording for a deck</p><p class="safe-t" id="safeT">{{ safe }}</p>
+    <p class="safe-n">{{ population_note }}</p><button type="button" class="chip" id="copySafe">Copy wording</button></div>{% endif %}
+</header>
+
+{%- for id, title in sections if id != "verdict" %}
+<section id="{{ id }}"><h2>{{ title }}</h2>{{ vbanner(id) }}
+{%- if id == "hypotheses" %}
+  <p class="lede">Where to take discovery next. These findings can suggest and prioritise hypotheses; they can't prove them. Each one shows how strongly the signals lean, and how to test it properly. Ones suggested by this data are never tested by it.</p>
+  {% set seen = {} %}<div class="scroll"><svg class="amap" viewBox="0 0 560 260" role="img" aria-label="Assumption map: importance against tested evidence">
+    <rect x="30" y="10" width="260" height="110" fill="var(--neg-soft)"/><line x1="30" x2="550" y1="120" y2="120" stroke="var(--rule)"/><line x1="290" x2="290" y1="10" y2="230" stroke="var(--rule)"/>
+    <text x="38" y="26" font-size="12" fill="var(--neg)" font-weight="600">Test first</text><text x="542" y="26" font-size="12" fill="var(--muted)" text-anchor="end">Build on it, keep checking</text>
+    <text x="38" y="222" font-size="12" fill="var(--muted)">Park for now</text><text x="30" y="252" font-size="11" fill="var(--muted)">Little tested evidence</text><text x="550" y="252" font-size="11" fill="var(--muted)" text-anchor="end">More tested evidence</text>
+    {% for hr in r.hypotheses %}{% set v = {"weak": 0, "moderate": 1, "strong": 2}[hr.strength] + (0.5 if hr.lean in ("leans for", "leans against") else 0) %}{% set v = [v, 0.85]|min if hr.origin == "formed" else v %}{% set im = {"low": 0, "medium": 1, "high": 2}[hr.importance] %}{% set key = v ~ ":" ~ im %}{% set _ = seen.update({key: seen.get(key, 0) + 1}) %}
+    <g><circle cx="{{ 30 + (v + 0.25) / 2.75 * 520 + (seen[key] - 1) * 18 }}" cy="{{ 10 + (2.5 - im) / 2.75 * 220 }}" r="13" fill="{{ 'var(--prob)' if hr.origin == 'stated' else 'var(--ink)' }}"/><text x="{{ 30 + (v + 0.25) / 2.75 * 520 + (seen[key] - 1) * 18 }}" y="{{ 14 + (2.5 - im) / 2.75 * 220 }}" font-size="11" text-anchor="middle" fill="var(--bg)" font-weight="600">{{ hr.id }}</text></g>{% endfor %}</svg></div>
+  <div class="keyline"><span><span class="sw" style="background:var(--prob);border-radius:50%;width:10px"></span>your belief</span><span><span class="sw" style="background:var(--ink);border-radius:50%;width:10px"></span>suggested by the data (stays left: this data can't also be its test)</span></div>
+  <div class="keyline"><span><span class="sw" style="background:var(--neg);opacity:.35"></span>{{ thresholds_lean.against }}% of re-draws or fewer: leans against</span><span><span class="sw" style="background:var(--pos);opacity:.35"></span>{{ thresholds_lean.for }}% or more: leans for</span></div>
+  {% for hr in r.hypotheses %}{% set hy = hypotheses[hr.id] %}{% set cls = {"leans for": "v-supported", "leans against": "v-contradicted", "mixed": "v-mixed"}.get(hr.lean, "v-not-testable") %}
+  <div class="item hyp">
+    <p class="owner">{{ hr.id }}: {{ "Your belief, from the sealed prior" if hr.origin == "stated" else "Suggested by this data" }}, {{ hr.importance }} importance</p>
+    <p class="stmt">{{ hy.statement }}</p>
+    <p class="hverdict {{ cls }}">{{ hr.lean|capitalize }}{% if hr.lean != "can't tell from this data" %}, <span class="strength s-{{ hr.strength }}">{{ hr.strength }} evidence</span>{% endif %} <span class="prio p-{{ hr.priority.split(',')[0].replace(' ', '-') }}">{{ hr.priority }}</span></p>
+    <p class="num" style="white-space:normal;margin:-4px 0 6px">{{ hr.voices|people }} behind the signals{% if hr.small_sample %}, small sample{% endif %}.</p>
+    <ul class="preds">{% for g in hr.signals %}{% set sg = hy.signals[loop.index0] %}{% set lean = {"for": "leans for", "against": "leans against"}.get(g.lean, "unclear") %}
+      <li class="pred"><div class="pred-h"><span class="vchip {{ {"leans for": "v-supported", "leans against": "v-contradicted"}.get(lean, "v-not-testable") }}">{{ lean }}</span> {{ sg.text }}</div>
+      {% if g.probability %}<div class="pbar" role="img" aria-label="{{ g.probability.pct }} percent"><span class="zone lo"></span><span class="zone hi"></span><span class="mark" style="left:{{ g.probability.pct }}%"></span></div>
+      <div class="num" style="white-space:normal">{{ g.probability.pct }}% of re-draws (resampling {{ g.probability.source }})</div>
+      {% elif g.share %}{% if g.share.range %}<div class="pbar" role="img" aria-label="likely {{ g.share.range[0] }} to {{ g.share.range[1] }} percent"><span class="range" style="left:{{ g.share.range[0] }}%;width:{{ [1, g.share.range[1] - g.share.range[0]]|max }}%"></span><span class="mid"></span></div>{% endif %}
+      <div class="num" style="white-space:normal">{{ g.share.k }} of {{ g.share.n }} people{% if g.share.range %} (likely {{ g.share.range[0] }}–{{ g.share.range[1] }}%){% endif %}{% if g.note %}: {{ g.note }}{% endif %}</div>
+      {% elif g.kind == "voices" %}<div class="num" style="white-space:normal">{{ g.voices_for|people }} for, {{ g.voices_against }} against</div>
+      {% else %}<div class="num" style="white-space:normal">{{ g.note }}</div>{% endif %}</li>{% endfor %}</ul>
+    {% if hy.not_distinguishing %}<p class="num" style="white-space:normal">Fits other explanations too, so it doesn't help decide: {{ hy.not_distinguishing|join(', ') }}</p>{% endif %}
+    <div class="next"><p class="safe-h">How to test it</p><p><b>Method:</b> {{ hy.next_step.method }}</p>{% if hy.next_step.recruit %}<p><b>Who:</b> {{ hy.next_step.recruit }}</p>{% endif %}
+      <p><b>Would support it:</b> {{ hy.next_step.confirm }}</p><p><b>Would count against it:</b> {{ hy.next_step.disconfirm }}</p>
+      {% if hy.next_step.questions %}<p><b>Starting questions:</b></p><ul>{% for q in hy.next_step.questions %}<li>{{ q }}</li>{% endfor %}</ul>{% endif %}</div>
+  </div>{% endfor %}
+
+{%- elif id == "stance" %}{% set st = r.stance %}
+  {% if not st %}{{ empty("Add a nullable 'stance' variable to the codebook to measure where people stand." if study.stance_target else "Set a proposition (crp new --stance-target) to measure where people stand.") }}
+  {% else %}{% set f = st.in_favour %}{% set a = st.against %}{% set u = st.neither %}
+  <p class="lede">Of {{ st.expressing.n }} sampled comments, {{ share(st.expressing) }} take a position on the proposition. Stance is separate from tone: someone can be angry and in favour.</p>
+  {% if f.status != "counts-only" %}<div class="strip" role="img" aria-label="{{ f.pct }}% for, {{ u.pct }}% neither, {{ a.pct }}% against">
+    <div class="bar"><span style="flex-basis:{{ f.pct }}%;background:var(--for)"></span><span class="u" style="flex-basis:{{ u.pct }}%"></span><span style="flex-basis:{{ a.pct }}%;background:var(--against)"></span></div>
+    <div class="legend"><span><i style="background:var(--for)"></i>For {{ f.pct }}%{{ likely(f) }}</span><span><i style="background:var(--neu)"></i>Neither {{ u.pct }}%</span><span><i style="background:var(--against)"></i>Against {{ a.pct }}%{{ likely(a) }}</span></div></div>
+  {% else %}<p>For: {{ f.k }} of {{ f.n }}; against: {{ a.k }} of {{ a.n }}. Fewer than {{ thresholds.MIN_PEOPLE_FOR_RANGES }} people, so counts only.</p>{% endif %}
+  <div class="two" style="margin-top:28px">{% for side, label, cls in [("in_favour", "What the for side talks about", "for"), ("against", "What the against side talks about", "against")] %}
+    <div><h3 style="margin-bottom:12px">{{ label }}</h3>{% set rows = st.talks_about.get(side, {}) %}{% if rows %}<div class="rows">{% for k, v in rows.items() %}<div class="drow stack" data-aspects="{{ k }}">{{ aspbtn(k) }}<div class="track"><div class="fill {{ cls }}" style="width:{{ v.pct or 0 }}%"></div></div><span class="num">raised in {{ share(v) }} of their comments</span></div>{% endfor %}</div>{% else %}{{ empty("Too few comments on this side.") }}{% endif %}</div>{% endfor %}</div>
+  {% endif %}
+
+{%- elif id == "drivers" %}
+  {% if not h %}{{ empty("Code the measurement sample and run crp analyse to fill this.") }}{% else %}
+  <p class="lede">Each bar is that {{ lens.aspect_word }}'s share of all negative (or positive) mentions in the random sample; the bracket is its likely range within this collection. "Top driver in X% of re-draws" comes from resampling people and threads (the less certain shown), so overlapping ranges mean the order isn't settled. Tap one to focus the whole page on it.</p>
+  {% set by = {} %}{% for a in r.aspects %}{% set _ = by.update({a.aspect: a}) %}{% endfor %}
+  <div class="two"><div><h3 style="margin-bottom:12px">Drivers of negativity</h3><div class="rows">
+    {% for name in r.drivers[:8] %}{% set a = by[name] %}{% set s = a.share_of_negative %}
+    <div class="drow stack" data-aspects="{{ name }}">{{ aspbtn(name) }}<div class="track rel" aria-hidden="true"><div class="fill neg{% if a.people < 3 or s.status != 'full' %} thin{% endif %}" style="width:{{ s.pct or 0 }}%"></div>{% if s.range %}<span class="whisk" style="left:{{ s.range[0] }}%;width:{{ [0.5, s.range[1] - s.range[0]]|max }}%"></span>{% endif %}</div>
+      <span class="num">{{ share(s) }}{% if s.status == "counts-only" %} negative mentions{% endif %}{{ likely(s) }}, {{ a.people|people }}, negative {{ share(a.negative_rate) }} of the time{% if a.top_driver %}, top driver in {{ a.top_driver.pct }}% of re-draws{% endif %}</span></div>
+    {% else %}{{ empty("Nothing with enough mentions.") }}{% endfor %}</div></div>
+    <div><h3 style="margin-bottom:12px">{{ "What the brand is valued for" if study.type == "brand" else "What people value" }}</h3><div class="rows">
+    {% for name in r.strengths[:6] %}{% set a = by[name] %}{% set s = a.share_of_positive %}
+    <div class="drow stack" data-aspects="{{ name }}">{{ aspbtn(name) }}<div class="track"><div class="fill pos{% if a.people < 3 or s.status != 'full' %} thin{% endif %}" style="width:{{ s.pct or 0 }}%"></div></div><span class="num">{{ share(s) }}{{ likely(s) }}, {{ a.people|people }}</span></div>
+    {% else %}{{ empty("Nothing with enough mentions.") }}{% endfor %}</div></div></div>
+  {% if r.by_source|length > 1 %}<h3 style="margin:28px 0 10px">By source</h3><div class="scroll"><table class="tbl"><thead><tr><th>Source</th><th>Share of sample</th><th>Negative</th></tr></thead><tbody>
+    {% for b in r.by_source %}<tr><td>{{ b.source }}</td><td>{{ share(b.share_of_sample) }} <span class="num">({{ b.share_of_sample.k }})</span></td><td>{{ share(b.negative) }}<span class="num">{{ likely(b.negative) }}</span></td></tr>{% endfor %}</tbody></table></div>{% endif %}
+  {% endif %}
+
+{%- elif id == "associations" %}
+  {% set A = r.aspects|selectattr("ranked")|list %}
+  {% if A|length < 3 or not h or h.negative.status == "counts-only" %}{{ empty("Needs the measurement sample with at least three associations, from 20 or more people.") }}{% else %}
+  <p class="lede">What people connect with the brand, placed by how often it comes up (strength) and how positively (favourability), after Keller's brand-equity model. Dot size reflects how many people raised it.</p>
+  {% set mx = (A|map(attribute="mention_rate.pct")|max) * 1.1 %}
+  <div class="scroll"><svg class="scatter" viewBox="0 0 640 320" role="group" aria-label="Associations by strength and favourability">
+    <line x1="40" x2="624" y1="{{ 16 + 2 / 4 * 264 }}" y2="{{ 16 + 2 / 4 * 264 }}" stroke="var(--rule)" stroke-width="1.5"/>
+    {% for a in A %}{% set x = 40 + a.mention_rate.pct / mx * 584 %}{% set y = 16 + (2 - a.mean) / 4 * 264 %}
+    <g class="pt" data-focus="{{ a.aspect }}" role="button" tabindex="0" aria-label="{{ a.aspect }}: mentioned in {{ a.mention_rate.pct }}% of comments, favourability {{ a.mean }}"><circle cx="{{ x }}" cy="{{ y }}" r="{{ 4 + a.people ** 0.5 }}" fill="{{ 'var(--neg)' if a.mean < 0 else 'var(--pos)' }}" fill-opacity=".85"/><text x="{{ x + 8 }}" y="{{ y + 4 }}" font-size="12" fill="var(--ink)">{{ a.aspect }}</text></g>{% endfor %}
+    <text x="624" y="26" font-size="11" fill="var(--muted)" text-anchor="end">Strong and favourable</text><text x="624" y="274" font-size="11" fill="var(--muted)" text-anchor="end">Strong but unfavourable</text>
+    <text x="44" y="26" font-size="11" fill="var(--muted)">Weak but favourable</text><text x="44" y="274" font-size="11" fill="var(--muted)">Weak and unfavourable</text>
+    <text x="40" y="308" font-size="11" fill="var(--muted)">Rarely mentioned</text><text x="624" y="308" font-size="11" fill="var(--muted)" text-anchor="end">Often mentioned (strength)</text></svg></div>
+  {% endif %}
+
+{%- elif id == "direction" %}{% set dr = r.direction %}{% set evt = r.event %}
+  {% if dr and dr.status == "ok" %}{% set P = dr.periods %}
+  <p class="lede">Negativity per {{ dr.unit }} is <b>{{ dr.trend.verdict if dr.trend else "insufficient data" }}</b>. The shaded band is the likely range; only periods with enough comments count towards the verdict.</p>
+  <div class="scroll"><table class="tbl"><thead><tr><th>{{ dr.unit|capitalize }}</th><th>Sampled</th><th>Negative</th><th>Top {{ lens.aspect_word }}s</th><th>Switching talk</th></tr></thead><tbody>
+    {% for pr in P %}<tr data-aspects="{{ pr.top_aspects.keys()|join('|') }}"><td>{{ pr.period }}</td><td>{{ pr.negative.n }}</td><td>{{ share(pr.negative) }}<span class="num">{{ likely(pr.negative) }}</span></td><td>{% for a in pr.top_aspects %}{{ aspbtn(a) }}{% if not loop.last %}, {% endif %}{% endfor %}</td><td>{% set sw = dr.switching.get(pr.period) %}{{ share(sw) if sw else "—" }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}{{ empty(dr.note if dr and dr.note else "No timestamps, so direction can't be shown. Collect material spread over several months.") }}{% endif %}
+  {% if evt %}<h3 style="margin:28px 0 10px">Before and after {{ evt.date }}</h3>
+  <div class="scroll"><table class="tbl"><thead><tr><th>Measure</th><th>Before</th><th>After</th><th>Change (range within this collection)</th><th>Verdict</th></tr></thead><tbody>
+    {% for m in evt.measures %}<tr><td>{{ {"negative": "Negative comments", "in_favour": "Comments for the proposition"}.get(m.measure, m.measure) }}</td><td>{{ share(m.before) }}{% if m.before.pct is not none %} <span class="num">({{ m.before.n }})</span>{% endif %}</td><td>{{ share(m.after) }}{% if m.after.pct is not none %} <span class="num">({{ m.after.n }})</span>{% endif %}</td><td>{% if m.diff_pts is not none %}{{ "%+g"|format(m.diff_pts) }} points{% if m.range %} <span class="num">({{ m.range[0] }} to {{ m.range[1] }})</span>{% endif %}{% else %}—{% endif %}</td><td><b>{{ m.verdict }}</b></td></tr>{% endfor %}</tbody></table></div>
+  {% if evt.aspect_shifts %}<p style="margin:14px 0 6px;font-size:14px"><b>Topics that shifted</b></p><ul class="shifts">{% for c in evt.aspect_shifts %}<li data-aspects="{{ c.measure }}">{{ aspbtn(c.measure) }} {{ c.verdict }} from {{ share(c.before) }} to {{ share(c.after) }} of comments</li>{% endfor %}</ul>{% endif %}
+  <p class="num" style="white-space:normal;margin-top:10px">{{ evt.note }}</p>{% endif %}
+
+{%- elif id == "themes" %}
+  {% set I = syn.insights if syn else [] %}
+  {% if not I %}{{ empty("Write synthesis/insights.json during synthesis to fill this.") }}{% else %}
+  <p class="lede">The main patterns, strongest first. Bars show how many different people support each; hatched means one voice or low confidence.</p>
+  {% set maxv = [1] + I|map(attribute="voices")|list %}{% set maxv = maxv|max %}
+  {% for conf in ["high", "medium", "low"] %}{% for i in I|selectattr("confidence", "equalto", conf)|sort(attribute="voices", reverse=True) %}{% set ins = insights[i.id] %}
+  <div class="item" data-aspects="{{ i.aspects|join('|') }}"><p class="stmt">{{ ins.statement }}</p>
+    <div class="metaline"><span class="conf-{{ i.confidence }}">{{ i.confidence }} confidence</span>
+      <span class="cov"><span class="track"><span class="fill ink{% if i.voices <= 1 or i.confidence == 'low' %} thin{% endif %}" style="display:block;width:{{ 100 * i.voices / maxv }}%"></span></span>{{ i.voices|people }}{% if i.interview_participants %} ({{ i.interview_participants }} from interviews){% endif %}</span>
+      <span>{{ i.strong }} of {{ i.n }} from specific incidents</span>{% if i.aspects %}<span>{% for a in i.aspects %}{{ aspbtn(a) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+    {% if ins.recommendations %}<ul class="recs">{% for x in ins.recommendations %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+    {{ evlist(i.post_ids, "Evidence: " ~ i.n ~ " coded posts") }}{% if i.counter_post_ids %}{{ evlist(i.counter_post_ids, "Counter-evidence: " ~ i.counter_n) }}{% endif %}</div>
+  {% endfor %}{% endfor %}{% endif %}
+
+{%- elif id in ("pains", "successes") %}
+  {% set G = syn[id] if syn else [] %}
+  {% if not G %}{{ empty("No friction coded yet." if id == "pains" else "No success moments coded yet.") }}{% else %}
+  <p class="lede">{{ "Ranked by people affected times the worst severity. Dots show severity: one is minor, three blocks the goal or causes real harm." if id == "pains" else "Where things work well enough that people say so." }}</p>
+  {% set maxv = (G|map(attribute="voices")|list + [1])|max %}
+  {% for g in G %}{% if loop.index == 9 %}<details class="more"><summary>Show more, mostly single voices</summary>{% endif %}
+  <div class="item" data-aspects="{{ g.aspect }}"><div class="drow">{{ aspbtn(g.aspect) }}<div class="track"><div class="fill {{ 'neg' if id == 'pains' else 'pos' }}{% if g.voices <= 1 %} thin{% endif %}" style="width:{{ 100 * g.voices / maxv }}%"></div></div>
+    <span class="num">{{ g.voices|people }}{% if id == "pains" %} <span class="pips" aria-label="worst severity {{ g.max_sev }} of 3">{% for k in [1, 2, 3] %}<span class="{{ 'on' if k <= g.max_sev }}"></span>{% endfor %}</span>{% endif %}</span></div>
+    {{ evlist(g.post_ids, "Evidence: " ~ g.n ~ " coded posts") }}</div>
+  {% if loop.last and loop.length > 8 %}</details>{% endif %}{% endfor %}{% endif %}
+
+{%- elif id == "jobs" %}
+  {% set J = syn.jobs if syn else [] %}
+  {% if not J %}{{ empty("Write synthesis/jobs.json during synthesis to fill this.") }}{% else %}
+  <p class="lede">What people are trying to get done. The balance shows forces pushing towards change on the left and forces holding them in place on the right.</p>
+  <div class="forces-key"><span><i class="f-push"></i>Push: pain now</span><span><i class="f-pull"></i>Pull: attraction of something new</span><span><i class="f-anxiety"></i>Anxiety about switching</span><span><i class="f-habit"></i>Habit</span></div>
+  {% for j in J %}{% set f = j.forces %}{% set tot = [1, f.push + f.pull, f.anxiety + f.habit]|max %}
+  <div class="item" data-aspects="{{ j.aspects|join('|') }}"><p class="stmt">{{ jobs[j.id].job }}</p>
+    <div class="forces" role="img" aria-label="push {{ f.push }}, pull {{ f.pull }}, anxiety {{ f.anxiety }}, habit {{ f.habit }}">
+      <div class="side l">{% for k in ["pull", "push"] %}{% if f[k] %}<span class="seg f-{{ k }}" style="width:{{ 100 * f[k] / tot }}%">{{ f[k] }}</span>{% endif %}{% endfor %}</div>
+      <div class="side">{% for k in ["anxiety", "habit"] %}{% if f[k] %}<span class="seg f-{{ k }}" style="width:{{ 100 * f[k] / tot }}%">{{ f[k] }}</span>{% endif %}{% endfor %}</div></div>
+    <div class="metaline"><span>{{ "Leaning towards change" if f.push + f.pull > f.anxiety + f.habit else "Held in place" if f.push + f.pull < f.anxiety + f.habit else "Balanced" }}</span><span>{{ j.voices|people }}</span>{% if j.aspects %}<span>{% for a in j.aspects %}{{ aspbtn(a) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}</div>
+    {{ evlist(j.post_ids, "Evidence: " ~ j.n ~ " coded posts") }}</div>{% endfor %}{% endif %}
+
+{%- elif id == "framing" %}
+  {% set F = syn.frames if syn else [] %}
+  {% if not F %}{{ empty("Add a blind 'frame' variable (problem, cause, moral, remedy) to the codebook to fill this.") }}{% else %}
+  <p class="lede">How people make sense of the story, using Entman's four functions of a frame: what the problem is, what caused it, who deserves blame or credit, and what should be done.</p>
+  {% set maxv = (F|map(attribute="voices")|list + [1])|max %}
+  {% for f in F %}<div class="item" data-aspects="{{ f.aspects|join('|') }}"><h3>{{ {"problem": "Defining the problem", "cause": "Diagnosing causes", "moral": "Moral judgements: who is to blame or praised", "remedy": "Proposed remedies"}.get(f.frame, f.frame) }}</h3>
+    <div class="drow" style="margin-top:8px;grid-template-columns:minmax(0,1fr) auto"><div class="track"><div class="fill ink{% if f.voices <= 1 %} thin{% endif %}" style="width:{{ 100 * f.voices / maxv }}%"></div></div><span class="num">{{ f.voices|people }}</span></div>
+    {{ evlist(f.post_ids, "Evidence: " ~ f.n ~ " coded posts") }}</div>{% endfor %}{% endif %}
+
+{%- elif id == "questions" %}
+  {% set Q = syn.questions if syn else [] %}
+  {% if not Q %}{{ empty("Tag observations 'question' when people ask something or say they're unsure.") }}{% else %}
+  <p class="lede">What people ask or say they're unsure about: gaps that clearer information could fill.</p>
+  {% for g in Q %}<div class="item" data-aspects="{{ g.aspect }}"><h3>{{ aspbtn(g.aspect) }} <span class="num">{{ g.n }} {{ "question" if g.n == 1 else "questions" }}</span></h3>{{ evlist(g.post_ids, "The questions") }}</div>{% endfor %}{% endif %}
+
+{%- elif id == "opportunities" %}
+  {% set O = syn.opportunities if syn else [] %}
+  {% if not O %}{{ empty("Write synthesis/opportunities.json during synthesis to fill this.") }}{% else %}
+  <p class="lede">Ranked by people affected × (1 + average severity of the pain behind it). A transparent heuristic, not a measured score; items without a pain behind them, such as strengths to build on, rank lower by design.</p>
+  {% set maxr = (O|map(attribute="rank_score")|list + [1])|max %}
+  {% for o in O %}<div class="item" data-aspects="{{ o.aspect or '' }}"><p class="stmt">{{ opportunities[o.id].statement }}</p>
+    <div class="track" style="max-width:520px;margin:4px 0 10px"><div class="fill ink{% if o.voices <= 1 %} thin{% endif %}" style="width:{{ 100 * o.rank_score / maxr }}%"></div></div>
+    <div class="metaline"><span>{{ o.kind }}</span>{% if o.aspect %}<span>{{ aspbtn(o.aspect) }}</span>{% endif %}<span>{{ o.voices|people }}</span>{% if o.mean_sev %}<span>severity {{ o.mean_sev }} of 3</span>{% endif %}{% if o.negative_rate_pct is not none %}<span>negative {{ o.negative_rate_pct }}% of the time</span>{% endif %}{% if o.insight_ids %}<span>from {{ o.insight_ids|join(', ') }}</span>{% endif %}</div>
+    {{ evlist(o.post_ids, "Evidence: " ~ o.n ~ " coded posts") }}</div>{% endfor %}{% endif %}
+
+{%- elif id == "entities" %}
+  <p class="lede">{{ lens.entity_lede }}</p>
+  <div class="scroll"><table class="tbl"><thead><tr>{% if lens.jtbd %}<th>Name</th><th>Mentioned by</th><th>Forces</th><th>Push / pull / anxiety / habit</th>{% else %}<th>Name</th><th>Mentioned by</th><th>Tone when mentioned (−2 to +2)</th>{% endif %}</tr></thead><tbody>
+  {% for p in syn.products %}{% set t = [1, p.push + p.pull + p.anxiety + p.habit]|max %}<tr><td><b>{{ p.name }}</b></td><td>{{ p.voices|people }}</td>
+    {% if lens.jtbd %}<td><span class="mini" role="img" aria-label="push {{ p.push }}, pull {{ p.pull }}, anxiety {{ p.anxiety }}, habit {{ p.habit }}">{% for k in ["push", "pull", "anxiety", "habit"] %}{% if p[k] %}<span class="f-{{ k }}" style="width:{{ 100 * p[k] / t }}%"></span>{% endif %}{% endfor %}</span></td><td class="num">{{ p.push }} / {{ p.pull }} / {{ p.anxiety }} / {{ p.habit }}</td>
+    {% else %}<td>{% if p.mean_sentiment is none %}<span class="num">not scored</span>{% else %}<span class="num">{{ p.mean_sentiment }}</span>{% endif %}</td>{% endif %}</tr>{% endfor %}</tbody></table></div>
+
+{%- elif id == "interviews" %}{% set iv = r.interviews %}
+  <p class="lede">Interviews are recruited and prompted, so they're counted on their own and never pooled with forum figures. Counts only.</p>
+  <p>{{ iv.transcripts }} {{ "transcript" if iv.transcripts == 1 else "transcripts" }}, {{ iv.participants }} {{ "participant" if iv.participants == 1 else "participants" }}, {{ iv.coded_turns }} of {{ iv.turns }} participant turns coded.</p>
+  {% if iv.codes %}<div class="scroll"><table class="tbl"><thead><tr><th>Code</th><th>Counts</th></tr></thead><tbody>{% for var, counts in iv.codes.items() %}<tr><td>{{ var|label }}</td><td>{% for k, v in counts.items() %}{{ k|label }} ({{ v }}){% if not loop.last %}, {% endif %}{% endfor %}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+
+{%- elif id == "language" %}{% set G = r.language %}{% set K = r.keyness %}
+  <p class="lede">Words over-used in negative against positive comments (log-likelihood, with a Benjamini-Hochberg correction), phrases many people share, and how often certain kinds of language appear.</p>
+  {% if K and K.shown %}<div class="two">{% for side, label, cls in [("negative", "Marks negative comments", "neg"), ("positive", "Marks positive comments", "pos")] %}<div><h3 style="margin-bottom:10px">{{ label }}</h3>
+    {% set words = K[side] %}{% if words %}{% set m = (words|map(attribute="g2")|list + [1])|max %}<ul class="words">{% for x in words[:12] %}<li><span class="w">{{ x.term }}</span><span class="track"><span class="fill {{ cls }}" style="display:block;width:{{ 100 * x.g2 / m }}%"></span></span><span class="num">{{ x.reach|people }}</span></li>{% endfor %}</ul>{% else %}{{ empty("Nothing distinctive after the correction.") }}{% endif %}</div>{% endfor %}</div>
+  {% else %}{{ empty(K.reason if K and K.reason else "Needs the measurement sample for the negative against positive comparison.") }}{% endif %}
+  <h3 style="margin:28px 0 10px">Phrases many people use</h3><div class="phrases">{% for p in G.phrases[:18] %}<span>{{ p.phrase }}<small>{{ p.reach }}</small></span>{% else %}{{ empty("No phrase used by three or more people.") }}{% endfor %}</div>
+  <h3 style="margin:28px 0 10px">Kinds of language, share of forum posts</h3><div class="rows">
+  {% set labels = {"switching_language": "Talk of switching or leaving", "workaround_language": "Workarounds", "constraint_language": "Being blocked (\"had to\", \"couldn't\")", "implicit_request": "Implicit requests (\"I wish\", \"is there a way\")"} if lens.jtbd else {"implicit_request": "Wishes and requests (\"I wish\", \"why can't\")", "constraint_language": "Constraint (\"had to\", \"couldn't\")", "switching_language": "Leaving or switching"} %}
+  {% for k, label in labels.items() %}{% set sr = G.signal_rates.get(k) %}<div class="drow" style="grid-template-columns:minmax(0,220px) minmax(0,1fr) auto"><span>{{ label }}</span><div class="track"><div class="fill prob" style="width:{{ (sr.pct or 0) if sr else 0 }}%"></div></div><span class="num">{{ share(sr) }}</span></div>{% endfor %}</div>
+
+{%- elif id == "trust" %}
+  <div class="keyline" style="margin-top:10px"><span><span class="sw"></span>solid: several voices</span><span><span class="sw thin" style="background:none;background-image:repeating-linear-gradient(135deg,var(--ink) 0 2px,transparent 2px 6px)"></span>hatched: one voice, low confidence or an early signal</span></div>
+  <div class="trust"><dl>
+    <dt>Subject and lens</dt><dd>{{ study.subject }} ({{ lens.label }})</dd>
+    {% if study.questions %}<dt>Research questions</dt><dd>{{ study.questions|join("<br>"|safe) }}</dd>{% endif %}
+    {% if study.stance_target %}<dt>Proposition for stance</dt><dd>{{ study.stance_target }}</dd>{% endif %}
+    <dt>How material was found</dt><dd>{% for s in col.sources %}{{ s.source }}: {{ s.threads }} {{ "thread" if s.threads == 1 else "threads" }}, {{ s.posts }} posts ({{ s.capture|join(", ") }}){% if s.search_terms %}; searched for {% for q in s.search_terms %}"{{ q }}"{% if not loop.last %}, {% endif %}{% endfor %}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}
+      {% if col.searches %}<br>{{ col.searches.logged }} searches logged, {{ col.searches.neutral }} of them neutral; {{ col.searches.kept_nothing }} kept nothing.{% else %}<br><span class="warnline">No collection log, so how the material was chosen is unknown.</span>{% endif %}</dd>
+    {% if col.transcription %}<dt>Capture checks</dt><dd>Transcriptions checked against their sources: {% for k, v in col.transcription.items() %}{{ k }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}.{% if col.transcription.get("unverified") %} <span class="warnline">Screenshot posts not cross-checked with OCR: {{ col.transcription.unverified }}.</span>{% endif %}{% if col.ingest %} Duplicates dropped: {{ col.ingest.duplicates_dropped }}; promotional posts flagged: {{ col.ingest.promotional_flagged }}; bot comments removed: {{ col.ingest.bots_removed }}.{% endif %}</dd>{% endif %}
+    <dt>Sentiment measured on</dt><dd>{% if h %}a random sample of {{ r.sample.n_items }} comments from {{ r.sample.n_people }} people in {{ r.sample.n_threads }} threads, drawn from {{ r.sample.eligible }} eligible posts with seed {{ r.seed }}: at most {{ r.sample.person_cap }} per person, and no thread above {{ r.sample.thread_cap_pct }}% of the sample{% else %}no random sample yet{% endif %}</dd>
+    {% if col.detail %}<dt>Read in detail</dt><dd>{% if col.detail.all_kept %}all {{ col.detail.candidates }} candidates{% else %}{{ col.detail.selected }} of {{ col.detail.candidates }}, chosen by code for signals, votes and topic spread, max {{ col.detail.per_person }} per person{% endif %}; {{ col.detail.echo_replies }} short agree or disagree replies counted, not read{% if col.detail.interview_turns %}; {{ col.detail.interview_turns }} interview turns read in full{% endif %}</dd>{% endif %}
+    <dt>AI coding checked against a human</dt><dd>{% if r.agreement_status %}{% for k, v in r.agreement_status.items() %}{{ k }}: {{ v }}{% if r.alpha[k] is not none %} (alpha {{ r.alpha[k] }}){% endif %}{% if not loop.last %}; {% endif %}{% endfor %}{% else %}<span class="warnline">Not measured yet.</span> Code the agreement sheet and run crp agreement score before relying on any figure.{% endif %}</dd>
+    {% if h %}<dt>Ranges</dt><dd>From {{ r.bootstrap_draws }} re-draws, resampling people and resampling threads; the wider range is shown. They describe this collection, not a wider population.</dd>{% endif %}
+    {% set sens = r.sensitivity %}{% if sens %}<dt>How much one source matters</dt><dd>{% if sens.min_pct is not none %}Leaving out one source, search term or large thread at a time: {{ sens.min_pct }}–{{ sens.max_pct }}% negative over {{ sens.removals_with_pct }} such checks{% if sens.most_moved %}; leaving out {{ sens.most_moved.kind|label }} {{ sens.most_moved.removed }} moved it most ({{ "%+g"|format(sens.most_moved.change_pts) }} points){% endif %}. {% else %}Too few people left after each removal for a percentage. {% endif %}{% if sens.without_caps and sens.without_caps.pct is not none %}Without the caps, an estimated {{ sens.without_caps.pct }}% of comments were negative.{% endif %}</dd>{% endif %}
+    {% if syn %}<dt>Evidence behind coded posts</dt><dd>{% for k, v in syn.evidence_mix.items() %}{{ k|label }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+    <dt>Direction</dt><dd>{{ "Several periods compared" if r.direction and r.direction.status == "ok" else "Snapshot: no trend can be claimed" }}</dd>
+    {% if r.themes %}<dt>Topic clusters</dt><dd>separation score {{ r.themes.silhouette }} ({{ "loose" if r.themes.silhouette < 0.1 else "moderate" if r.themes.silhouette < 0.3 else "clear" }})</dd>{% endif %}
+    <dt>Quotes</dt><dd>{{ "Withheld. Evidence is paraphrased, with post ids that trace to source files kept privately." if shareable else "Included, for internal use only. Share the --shareable build." }}</dd>
+    <dt>Who this describes</dt><dd>{{ study.population or "People who chose to post in these communities. They skew vocal and are not a sample of all users, customers or the public." }}</dd>
+  </dl></div>
+{%- endif %}
+</section>
+{%- endfor %}
+</main>
+</div>
+<script>
+(() => {
+const main = document.getElementById('main'), bar = document.getElementById('focusbar'), ftext = document.getElementById('focustext');
+function setFocus(a){
+  document.querySelectorAll('[data-aspects]').forEach(el => {
+    const list = el.dataset.aspects ? el.dataset.aspects.split('|') : [];
+    el.classList.toggle('hide', !!a && !list.includes(a));
+  });
+  bar.classList.toggle('on', !!a);
+  ftext.textContent = a ? 'Focused on ' + a : '';
+}
+main.addEventListener('click', e => { const b = e.target.closest('[data-focus]'); if (b){ setFocus(b.getAttribute('data-focus')); bar.scrollIntoView({block:'nearest'}); } });
+main.addEventListener('keydown', e => { const b = e.target.closest('g[data-focus]'); if (b && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); setFocus(b.getAttribute('data-focus')); } });
+document.getElementById('clearFocus').addEventListener('click', () => setFocus(null));
+const cs = document.getElementById('copySafe');
+if (cs) cs.addEventListener('click', async () => {
+  const t = document.getElementById('safeT').textContent;
+  try { await navigator.clipboard.writeText(t); cs.textContent = 'Copied'; }
+  catch(e){ const rg = document.createRange(); rg.selectNodeContents(document.getElementById('safeT')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg); cs.textContent = 'Selected: copy with your keyboard'; }
+});
+const root = document.documentElement;
+try { const t = localStorage.getItem('dash-theme'); if (t) root.dataset.theme = t; } catch(e){}
+const tt = document.getElementById('themeT');
+if (tt) tt.addEventListener('click', () => {
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  try { localStorage.setItem('dash-theme', root.dataset.theme); } catch(e){}
+});
+})();
+</script>
+</body>
+</html>

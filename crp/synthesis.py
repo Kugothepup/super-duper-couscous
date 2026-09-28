@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 from collections import Counter, defaultdict
+from itertools import combinations
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -38,6 +39,8 @@ FORCES = ("push", "pull", "anxiety", "habit")
 ENTITY = ("product:", "entity:", "brand:")
 JOB_STORY = re.compile(r"(?i)^when\b.+\bi want\b.+\bso\b")
 NO_ASPECT = {None, "", "not_applicable", "none", "other"}
+LOOK = {"hesitation_cluster", "constraint_language", "implicit_request", "workaround_language", "switching_language",
+        "high_engagement"}  # build_report.py: flags worth a look when no observation covers the post
 
 
 @dataclass
@@ -218,10 +221,30 @@ def aspects_of(ns: list[Nugget]) -> list[str]:
     return sorted({n.aspect for n in ns} - {"other"})
 
 
-def summarise(checked: dict, negative_rate: dict[str, float | None], codebook: Codebook) -> dict:
+def diverse(ns: list[Nugget], k: int = 3) -> list[Nugget]:
+    """build_report.py's pick: up to k, distinct people first, preferring strong evidence, severity, then score."""
+    ranked = sorted(ns, key=lambda n: (not n.strong, -(n.codes.get("severity") or 0), -(n.post.score or 0)))
+    out, seen = [], set()
+    for n in ranked:
+        if n.person not in seen:
+            out.append(n)
+            seen.add(n.person)
+        if len(out) == k:
+            return out
+    for n in ranked:
+        if n not in out:
+            out.append(n)
+        if len(out) == k:
+            break
+    return out
+
+
+def summarise(checked: dict, negative_rate: dict[str, float | None], codebook: Codebook, top_drivers: list[str] = (),
+              detail_posts: list[Post] = (), flags: dict[str, list[str]] | None = None) -> dict:
     """Reach, counter-evidence, severity, forces and ranks for results.json. Numbers and ids only."""
     files, nuggets = checked["files"], checked["nuggets"]
     ns = list(nuggets.values())
+    flags = flags or {}
 
     def get(ids: list[str]) -> list[Nugget]:
         return [nuggets[i] for i in ids if i in nuggets]
@@ -281,7 +304,22 @@ def summarise(checked: dict, negative_rate: dict[str, float | None], codebook: C
             frames.append({"frame": f, "n": len(items), **people(items), "aspects": aspects_of(items),
                            "post_ids": [n.post.post_id for n in items]})
     questions = sorted(group([n for n in ns if "question" in n.obs.tags], lambda n: n.aspect), key=lambda g: -g["n"])
-    return {"observations": len(ns), "evidence_mix": dict(sorted(Counter(str(n.codes.get("evidence_type"))
+    forces = {f: {"n": len(fn), **people(fn), "post_ids": [n.post.post_id for n in fn]}
+              for f in FORCES for fn in [[n for n in ns if n.codes.get("jtbd_force") == f]]}
+    pairs = Counter(pair for n in ns for pair in combinations(sorted({t for t in n.obs.tags if not t.startswith(ENTITY)}), 2))
+    tag_pairs = [{"a": a, "b": b, "n": c} for (a, b), c in pairs.most_common(15) if c >= 2]
+    driver_evidence, unexplained = {}, []
+    for a in top_drivers:
+        rel = [n for n in ns if n.aspect == a or a in n.obs.tags]
+        if rel:
+            driver_evidence[a] = [n.post.post_id for n in diverse(rel)]
+        else:
+            unexplained.append(a)
+    observed = set(nuggets)
+    flagged = sorted((p for p in detail_posts if p.post_id not in observed and LOOK & set(flags.get(p.post_id, ()))),
+                     key=lambda p: -(p.score or 0))
+    return {"observations": len(ns), "forces": forces, "tag_pairs": tag_pairs, "driver_evidence": driver_evidence,
+            "unexplained_drivers": unexplained, "unexamined": [p.post_id for p in flagged[:12]], "evidence_mix": dict(sorted(Counter(str(n.codes.get("evidence_type"))
                                                                          for n in ns).items())),
             "insights": insights, "pains": pains, "successes": successes, "jobs": jobs,
             "opportunities": opportunities, "products": product_rows, "frames": frames, "questions": questions}
