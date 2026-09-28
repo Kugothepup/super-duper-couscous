@@ -313,3 +313,85 @@ def test_keyness_matches_language_py_under_the_skills_rules(same_sample):
     assert (b["negative_docs"], b["positive_docs"], b["negative_words"], b["positive_words"]) == \
         tuple(ours["basis"][k] for k in ("negative_items", "positive_items", "negative_words", "positive_words"))
     assert ref["negative"] or ref["positive"]  # something was compared
+
+
+# ---- synthesis layer (themes.py, language.py phrases, hypotheses.py) ----------
+
+def test_themes_match_themes_py_on_posts(same_sample, tmp_path):
+    from crp.themes import cluster, items_of
+    work, _, posts = same_sample
+    run_reference("themes.py", "--work", work, "--source", "turns")
+    ref = json.loads((work / "themes.json").read_text())
+    ours = cluster(items_of(tmp_path / "ours", "posts"))
+    to_ours = ref_post_ids(work, list(posts.values()))
+    assert (ref["n_items"], ref["silhouette"], ref["method"]) == (ours["n_items"], ours["silhouette"], ours["method"])
+    assert len(ref["clusters"]) == len(ours["clusters"])
+    for r, o in zip(ref["clusters"], ours["clusters"]):
+        assert (r["cluster_id"], r["size"], r["top_terms"], r["coverage"]) == \
+            (o["cluster_id"], o["size"], o["top_terms"], o["coverage"])
+        assert [to_ours[m] for m in r["members"]] == o["members"]
+        assert [to_ours[x["ref"]] for x in r["representative"]] == o["representative"]
+        assert (r["dominated_by"] is None) == (o["dominated_by"] is None)
+
+
+def test_phrases_and_signal_rates_match_language_py(same_sample, tmp_path):
+    from crp import language
+    from crp.io import read_jsonl as read_model
+    from crp.schemas import Post
+    work, _, _ = same_sample
+    run_reference("language.py", "--work", work)
+    ref = json.loads((work / "language.json").read_text())
+    d = tmp_path / "ours"
+    posts = read_model(d / "posts.jsonl", Post)
+    said = [(p.text, p.person_code) for p in posts if p.source_type == "forum" and p.role == "participant"]
+    assert ref["phrases"] == language.phrases(said)
+    rows = {r["post_id"]: r for r in read_jsonl(d / "signals.jsonl")}
+    rates = language.signal_rates(posts, rows)
+    assert ref["signal_basis"] == rates["switching_language"]["n"]
+    assert ref["signal_rates"] == {k: pct_of(v) for k, v in rates.items()}
+
+
+def test_hypothesis_probabilities_and_voices_match_hypotheses_py(same_sample):
+    from crp import stats
+    from crp.hypotheses import score
+    from crp.schemas import Hypothesis
+    work, records, posts = same_sample
+    run_reference("drivers.py", "--work", work, "--boot", 2000, "--seed", 11)
+    ref_of = {pid: ref for ref, pid in ref_post_ids(work, list(posts.values())).items()}
+    chosen = [r.post_id for r in records[:12]]
+    nugget_of, per_thread = {}, {}
+    for n, pid in enumerate(chosen):
+        tid, turn = ref_of[pid].split("#")
+        nid = f"{tid}-N{len(per_thread.setdefault(tid, [])) + 1:02d}"
+        per_thread[tid].append({"id": nid, "transcript_id": tid, "turn_ids": [int(turn)], "quote": "q", "observation": "o",
+                                "jtbd_force": "push", "evidence_type": "opinion", "friction": False})
+        nugget_of[pid] = nid
+    (work / "nuggets").mkdir()
+    for tid, ns in per_thread.items():
+        (work / "nuggets" / f"{tid}.json").write_text(json.dumps(ns))
+
+    def hyps(ids):
+        return [{"id": "H1", "origin": "formed", "statement": "s", "importance": "high", "signals": [
+            {"id": "a", "text": "t", "test": {"type": "greater", "a": "sync", "b": "search", "measure": "share_of_negative"}},
+            {"id": "b", "text": "t", "test": {"type": "above", "aspect": "sync", "measure": "negative_rate", "threshold": 30}},
+            {"id": "c", "text": "t", "test": {"type": "above", "aspect": "offline", "measure": "mention_rate", "threshold": 20}},
+            {"id": "d", "text": "t", "test": {"type": "proportion", "k_ids": ids[:3], "n_ids": ids[:8]}},
+            {"id": "e", "text": "t", "for": ids[:5], "against": ids[5:7]}],
+            "next_step": {"method": "m", "confirm": "c", "disconfirm": "d"}}]
+    (work / "hypotheses.json").write_text(json.dumps({"hypotheses": hyps([nugget_of[p] for p in chosen])}))
+    run_reference("hypotheses.py", "--work", work)
+    ref = {s["id"]: s for s in json.loads((work / "hypotheses_result.json").read_text())["hypotheses"][0]["signals"]}
+
+    class N:
+        def __init__(self, person):
+            self.person = person
+    person = {r.post_id: r.person for r in records}
+    eng = stats.Engine(records, draws=2000, seed=11)
+    ours = score([Hypothesis.model_validate(h) for h in hyps(chosen)], {p: N(person[p]) for p in chosen}, eng,
+                 len(records), len({r.person for r in records}), 2000, 11)
+    got = {s["id"]: s for s in ours["hypotheses"][0]["signals"]}
+    for sid in "abc":  # the same re-draws resampling people give the same probabilities
+        assert ref[sid]["prob"] == got[sid]["probability"]["pct_people"]
+    assert (ref["d"]["k"], ref["d"]["n"]) == (got["d"]["share"]["k"], got["d"]["share"]["n"])  # its range is D28's
+    assert (ref["e"]["voices_for"], ref["e"]["voices_against"], ref["e"]["lean"]) == \
+        (got["e"]["voices_for"], got["e"]["voices_against"], got["e"]["lean"])

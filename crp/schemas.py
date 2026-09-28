@@ -260,6 +260,106 @@ class HumanLabel(Strict):
     values: dict[str, LabelValue]
 
 
+# ---- synthesis: what the AI writes (D10, D31) ---------------------------------
+
+PostRef = Annotated[str, Field(pattern=r"^[A-Za-z0-9_.:-]+$")]
+Tag = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9 _.:/+&'-]*$")]  # lowercase; product:<name> for products
+
+
+class Observation(Strict):
+    """One line of synthesis/observations.jsonl: the AI's reading of one coded detail post (one per post)."""
+    post_id: PostRef
+    observation: NonEmpty
+    quote: NonEmpty  # verbatim from the post; "..." skips words
+    tags: list[Tag] = []
+
+
+class Insight(Strict):
+    id: Annotated[str, Field(pattern=r"^I\d{2,}$")]
+    statement: NonEmpty
+    post_ids: list[PostRef] = Field(min_length=1)
+    counter_post_ids: list[PostRef] = []
+    confidence: Literal["high", "medium", "low"]
+    recommendations: list[NonEmpty] = []
+
+
+class Job(Strict):
+    id: Annotated[str, Field(pattern=r"^J\d+$")]
+    job: NonEmpty  # "When <situation>, I want to <motivation>, so I can <outcome>"
+    post_ids: list[PostRef] = Field(min_length=1)
+
+
+OPPORTUNITY_KINDS = ("fix a pain", "reduce anxiety", "amplify a strength", "serve an unmet job", "implication")
+
+
+class Opportunity(Strict):
+    id: Annotated[str, Field(pattern=r"^OP\d+$")]
+    statement: NonEmpty
+    kind: Literal[OPPORTUNITY_KINDS]
+    aspect: str | None = None
+    insight_ids: list[str] = []
+    post_ids: list[PostRef] = Field(min_length=1)
+
+
+class TopDriverTest(Strict):
+    type: Literal["top_driver"]
+    aspect: NonEmpty
+
+
+class GreaterTest(Strict):
+    type: Literal["greater"]
+    a: NonEmpty
+    b: NonEmpty
+    measure: Literal["share_of_negative", "negative_rate", "mention_rate"] = "share_of_negative"
+
+
+class AboveTest(Strict):
+    type: Literal["above"]
+    aspect: NonEmpty
+    measure: Literal["share_of_negative", "negative_rate", "mention_rate"] = "share_of_negative"
+    threshold: float = Field(ge=0, le=100)
+
+
+class ProportionTest(Strict):
+    type: Literal["proportion"]
+    k_ids: list[PostRef]
+    n_ids: list[PostRef] = Field(min_length=1)
+
+
+class Signal(Strict):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    id: NonEmpty
+    text: NonEmpty
+    test: Annotated[TopDriverTest | GreaterTest | AboveTest | ProportionTest, Field(discriminator="type")] | None = None
+    for_ids: list[PostRef] = Field(default=[], alias="for")
+    against_ids: list[PostRef] = Field(default=[], alias="against")
+
+    @model_validator(mode="after")
+    def _one_kind(self) -> Signal:
+        if self.test is not None and (self.for_ids or self.against_ids):
+            raise ValueError("a signal has either a test or for/against posts, not both")
+        return self
+
+
+class NextStep(Strict):
+    method: NonEmpty
+    recruit: str | None = None
+    confirm: NonEmpty
+    disconfirm: NonEmpty
+    questions: list[NonEmpty] = []
+
+
+class Hypothesis(Strict):
+    id: Annotated[str, Field(pattern=r"^H\d+$")]
+    origin: Literal["stated", "formed"]  # stated: Steeve's belief, from the unsealed prior (D31)
+    owner: str | None = None
+    statement: NonEmpty
+    importance: Literal["high", "medium", "low"]
+    signals: list[Signal] = []
+    not_distinguishing: list[PostRef] = []
+    next_step: NextStep
+
+
 # ---- results -----------------------------------------------------------------
 
 Status = Literal["full", "early-signal", "counts-only"]
@@ -471,6 +571,111 @@ class Keyness(Strict):
     positive: list[KeyTerm] = []
 
 
+class Reach(Strict):
+    """How many coded posts and people support something. Interview participants are counted apart (D14)."""
+    n: int = Field(ge=0)
+    voices: int = Field(ge=0)
+    forum_people: int = Field(ge=0)
+    interview_participants: int = Field(ge=0)
+    post_ids: list[str] = []
+
+
+class AspectGroup(Reach):
+    aspect: NonEmpty
+    max_sev: int = 0
+    mean_sev: float = 0.0
+    strong: int = 0
+
+
+class InsightResult(Reach):
+    id: NonEmpty
+    confidence: Literal["high", "medium", "low"]
+    strong: int
+    counter_n: int
+    counter_voices: int
+    aspects: list[str] = []
+    counter_post_ids: list[str] = []
+
+
+class JobResult(Reach):
+    id: NonEmpty
+    forces: dict[str, int]
+    aspects: list[str] = []
+
+
+class OpportunityResult(Reach):
+    id: NonEmpty
+    kind: NonEmpty
+    aspect: str | None = None
+    mean_sev: float
+    negative_rate_pct: float | None = None
+    rank_score: float
+    insight_ids: list[str] = []
+
+
+class ProductResult(Strict):
+    name: NonEmpty
+    push: int
+    pull: int
+    anxiety: int
+    habit: int
+    n: int
+    voices: int
+    mean_sentiment: float | None = None
+
+
+class FrameResult(Reach):
+    frame: NonEmpty
+    aspects: list[str] = []
+
+
+class SynthesisResult(Strict):
+    observations: int
+    evidence_mix: dict[str, int] = {}
+    insights: list[InsightResult] = []
+    pains: list[AspectGroup] = []
+    successes: list[AspectGroup] = []
+    jobs: list[JobResult] = []
+    opportunities: list[OpportunityResult] = []
+    products: list[ProductResult] = []
+    frames: list[FrameResult] = []
+    questions: list[AspectGroup] = []
+
+
+class SignalResult(Strict):
+    id: NonEmpty
+    kind: Literal["top_driver", "greater", "above", "proportion", "voices"]
+    lean: Literal["for", "against", "unclear"]
+    probability: Probability | None = None
+    share: Share | None = None
+    voices_for: int | None = None
+    voices_against: int | None = None
+    note: str | None = None
+
+
+class HypothesisResult(Strict):
+    id: NonEmpty
+    origin: Literal["stated", "formed"]
+    importance: Literal["high", "medium", "low"]
+    lean: Literal["leans for", "leans against", "mixed", "can't tell from this data"]
+    strength: Literal["weak", "moderate", "strong"]
+    voices: int
+    small_sample: bool
+    priority: Literal["test first", "build on it, keep checking", "park for now"]
+    signals: list[SignalResult] = []
+
+
+class Phrase(Strict):
+    phrase: NonEmpty
+    reach: int
+    freq: int
+
+
+class LanguageResult(Strict):
+    phrases: list[Phrase] = []
+    signal_rates: dict[str, Share] = {}
+
+
 class Results(Strict):
     """studies/<id>/results/results.json: every number the outputs show, made by crp analyse."""
     study_id: Slug
@@ -495,3 +700,6 @@ class Results(Strict):
     sensitivity: Sensitivity | None = None
     interviews: Interviews | None = None
     keyness: Keyness | None = None
+    language: LanguageResult | None = None
+    synthesis: SynthesisResult | None = None
+    hypotheses: list[HypothesisResult] = []

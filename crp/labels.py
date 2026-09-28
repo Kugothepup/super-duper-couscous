@@ -162,6 +162,19 @@ def validate(study_dir: Path, only: list[str] | None = None) -> dict:
     return {"ok": not any(r["errors"] for r in reports), "batches": reports}
 
 
+def labelled(study_dir: Path, index: dict) -> dict[tuple[str, str], dict]:
+    """(sample, post id) -> label values, for every coded item. A post can be in both samples."""
+    out = {}
+    for entry in index["batches"]:
+        post_of = {it["item_id"]: it["post_id"] for it in entry["items"]}
+        if not (study_dir / labels_file(entry["batch"])).exists():  # not coded yet
+            continue
+        labels, _ = read_labels(study_dir / labels_file(entry["batch"]))
+        for lab in labels:
+            out[(entry["sample"], post_of[lab.item_id])] = lab.values
+    return out
+
+
 # ---- lock --------------------------------------------------------------------
 
 def _files(study_dir: Path, index: dict) -> dict[str, str]:

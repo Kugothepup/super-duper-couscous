@@ -249,6 +249,11 @@ CODEBOOK = {
                          3: "severe: blocked, lost data, or drove switching"}},
         {"name": "aspect", "description": "The one aspect the nugget is mainly about", "applies_to": "detail",
          "level": "nominal", "values": ASPECTS + ["not_applicable"]},
+        {"name": "sentiment", "description": "The writer's feeling towards that aspect", "applies_to": "detail",
+         "level": "ordinal", "values": [-2, -1, 0, 1, 2], "definitions": SCORE_DEFS},
+        {"name": "success", "description": "Something clearly worked for the writer: a goal met, or a feature that "
+                                           "changed how they work. Liking it isn't enough",
+         "applies_to": "detail", "level": "nominal", "values": [True, False]},
     ]}
 
 

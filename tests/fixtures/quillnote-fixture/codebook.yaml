@@ -35,7 +35,7 @@ variables:
   - 0
   - 1
   - 2
-  definitions:
+  definitions: &id001
     -2: 'strongly negative: strong language, lost work, cancelled or switched'
     -1: 'negative: a plain complaint'
     0: neutral, mixed, unclear or off-topic
@@ -104,3 +104,22 @@ variables:
   - offline
   - backlinks
   - not_applicable
+- name: sentiment
+  description: The writer's feeling towards that aspect
+  applies_to: detail
+  level: ordinal
+  values:
+  - -2
+  - -1
+  - 0
+  - 1
+  - 2
+  definitions: *id001
+- name: success
+  description: 'Something clearly worked for the writer: a goal met, or a feature
+    that changed how they work. Liking it isn''t enough'
+  applies_to: detail
+  level: nominal
+  values:
+  - true
+  - false

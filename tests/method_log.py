@@ -20,7 +20,8 @@ sys.path.insert(0, str(HERE / "reference"))
 
 from conftest import FIXTURE_SECRETS, FIXTURE_STUDY, write_labels  # noqa: E402
 from crp import stats  # noqa: E402
-from crp.analyse import labelled, measurement_records  # noqa: E402
+from crp.analyse import measurement_records  # noqa: E402
+from crp.labels import labelled  # noqa: E402
 from crp.anonymise import anonymise  # noqa: E402
 from crp.batch import make_batches, read_index  # noqa: E402
 from crp.codebook import freeze, frozen  # noqa: E402
@@ -136,6 +137,15 @@ def main() -> None:
         w = cap_weights(records, eligible, summary["measurement"]["frame"]["person_cap"], summary["measurement"]["threads"])
         rows.append(("D27 without caps", "% negative", f"{h_new['negative']['pct']}% (capped sample)",
                      f"{without_caps(records, w)['pct']}% (estimated, uncapped)"))
+        from crp.hypotheses import proportion
+        detail = {pid: v for (smp, pid), v in labelled(d, read_index(d)).items() if smp == "detail"}
+        person = {p.post_id: p.person_code for p in posts}
+        n_people = {person[pid] for pid, v in detail.items()}
+        k_people = {person[pid] for pid, v in detail.items() if v.get("friction") is True}
+        sh = proportion(k_people, n_people, len(detail), 5000, SEED)
+        rows.append(("D28 ranges", "proportion signal: people with friction among coded detail posts",
+                     f"{sh['k']} of {sh['n']}, {round(100 * sh['k'] / sh['n'], 1)}% (Wilson {rng(ref.wilson(sh['k'], sh['n']))})",
+                     shown(sh)))
     print(f"Fixture study, seed {SEED}, thread cap 30%, dummy codes: {len(records)} comments from "
           f"{len({r.person for r in records})} people.\n")
     print("| Change | Figure | Old | New |")

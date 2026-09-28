@@ -10,6 +10,10 @@ from crp.anonymise import anonymise
 from crp.ingest import ingest
 from crp import agreement, labels, thresholds
 from crp.analyse import analyse
+from crp import synthesis, themes as themes_mod, view as view_mod
+from crp.codebook import frozen
+from crp.io import read_jsonl
+from crp.schemas import Post
 from crp.batch import make_batches
 from crp.codebook import freeze
 from crp.io import InputError, validate
@@ -315,7 +319,62 @@ def cmd_analyse(args: argparse.Namespace) -> int:
         iv = r["interviews"]
         print(f"Interviews (own section, counts only): {iv['transcripts']} transcript(s), {iv['participants']} "
               f"participant(s), {iv['coded_turns']} of {iv['turns']} turns coded")
+    syn = r.get("synthesis")
+    if syn:
+        print(f"Synthesis: {syn['observations']} observations, {len(syn['insights'])} insights, {len(syn['pains'])} "
+              f"pain groups, {len(syn['jobs'])} jobs, {len(syn['opportunities'])} opportunities")
+    for hyp in r.get("hypotheses", []):
+        print(f"  {hyp['id']} [{hyp['origin']}, {hyp['importance']}] {hyp['lean']}, {hyp['strength']} "
+              f"({hyp['voices']} people) -> {hyp['priority']}")
+    for w in out["warnings"]:
+        print(f"~ {w}")
     print(f"Written to {d}/results/results.json")
+    return 0
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    codebook, _ = frozen(d)
+    rep = synthesis.check(d, codebook, read_jsonl(d / "posts.jsonl", Post))
+    print("Synthesis files: " + ", ".join(f"{k} {v}" for k, v in rep["counts"].items()))
+    for w in rep["warnings"]:
+        print(f"WARN  {w}")
+    for e in rep["errors"]:
+        print(f"ERROR {e}")
+    print(f"{len(rep['errors'])} error(s), {len(rep['warnings'])} warning(s)")
+    return 0 if rep["ok"] else 1
+
+
+def cmd_themes(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    out = themes_mod.themes(d, source=args.source, k=args.k)
+    print(f"{out['n_items']} {out['source']} from {out['n_people']} people -> {len(out['clusters'])} clusters via "
+          f"{out['method']} (silhouette {out['silhouette']})")
+    if out["silhouette"] < 0.1:
+        print("  ! Low silhouette: the clusters overlap heavily. Treat them as loose groupings only.")
+    for c in out["clusters"]:
+        dom = f"  ! mostly {c['dominated_by']}" if c["dominated_by"] else ""
+        print(f"{c['cluster_id']} n={c['size']:>3} people={c['coverage']}  {', '.join(c['top_terms'][:5])}{dom}"
+              f"\n     read: crp view posts {args.study} {' '.join(c['representative'])}")
+    print(f"Written to {d}/results/themes.json. Clusters are a second opinion, not the synthesis.")
+    return 0
+
+
+def cmd_view(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    if args.what == "thread":
+        lo, _, hi = (args.range or "1-1000000000").partition("-")
+        lines = view_mod.view_thread(d, args.thread_id, int(lo), int(hi or lo))
+    elif args.what == "detail":
+        lines = view_mod.view_detail(d, args.batch)
+    elif args.what == "posts":
+        lines = view_mod.view_posts(d, args.ids)
+    elif args.what == "kwic":
+        lines = view_mod.kwic(d, args.term, args.regex, args.all_speakers, args.width)
+    else:
+        lines = view_mod.view_observations(d, args.force, args.tag, args.evidence, args.friction, args.min_severity,
+                                           args.quotes)
+    print("\n".join(lines))
     return 0
 
 
@@ -431,6 +490,44 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, help="seed for the re-draws (default: the sample's)")
     p.add_argument("--draws", type=int, default=5000, help="bootstrap re-draws (default 5000)")
     p.set_defaults(func=cmd_analyse)
+
+    p = sub.add_parser("validate", help="check the synthesis files in synthesis/")
+    p.add_argument("study")
+    p.set_defaults(func=cmd_validate)
+
+    p = sub.add_parser("themes", help="cluster observations or posts: a second opinion on the synthesis")
+    p.add_argument("study")
+    p.add_argument("--source", choices=["observations", "posts"], default="observations")
+    p.add_argument("--k", type=int, help="fix the number of clusters")
+    p.set_defaults(func=cmd_themes)
+
+    p = sub.add_parser("view", help="read threads, the detail selection, posts, keywords or observations")
+    vsub = p.add_subparsers(dest="what", required=True, metavar="what")
+    q = vsub.add_parser("thread", help="a whole thread or interview")
+    q.add_argument("study")
+    q.add_argument("thread_id")
+    q.add_argument("--range", help="posts by position, e.g. 1-80")
+    q = vsub.add_parser("detail", help="the detail selection, in batches of 40")
+    q.add_argument("study")
+    q.add_argument("--batch", type=int)
+    q = vsub.add_parser("posts", help="particular posts")
+    q.add_argument("study")
+    q.add_argument("ids", nargs="+")
+    q = vsub.add_parser("kwic", help="every use of a term in context")
+    q.add_argument("study")
+    q.add_argument("term")
+    q.add_argument("--regex", action="store_true")
+    q.add_argument("--all-speakers", action="store_true", help="include interviewer turns")
+    q.add_argument("--width", type=int, default=60)
+    q = vsub.add_parser("observations", help="observations with their blind codes")
+    q.add_argument("study")
+    q.add_argument("--force")
+    q.add_argument("--tag")
+    q.add_argument("--evidence", help="comma-separated evidence grades")
+    q.add_argument("--friction", action="store_true")
+    q.add_argument("--min-severity", type=int, default=0)
+    q.add_argument("--quotes", action="store_true")
+    p.set_defaults(func=cmd_view)
     return parser
 
 

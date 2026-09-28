@@ -11,14 +11,14 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from crp import manifest, stats, thresholds
+from crp import hypotheses, language, manifest, stats, synthesis, thresholds
 from crp.anonymise import POSTS
 from crp.batch import INDEX, labels_file, read_index
 from crp.codebook import CODEBOOK, frozen
 from crp.io import InputError, atomic_write_text, read_jsonl, read_yaml, sha256_file, validate
 from crp.keyness import METHOD as KEYNESS_METHOD
 from crp.keyness import keyness
-from crp.labels import LABELS_LOCK, locked, read_labels
+from crp.labels import LABELS_LOCK, labelled, locked
 from crp.sample import MEASUREMENT, SUMMARY, candidates, load_measurement
 from crp.schemas import Codebook, Post, Results, Study
 from crp.sensitivity import cap_weights, leave_one_out, without_caps
@@ -27,17 +27,6 @@ from crp.stats import BOOT_DRAWS, Engine, Record
 
 RESULTS = Path("results") / "results.json"
 AGREEMENT = Path("results") / "agreement.json"
-
-
-def labelled(study_dir: Path, index: dict) -> dict[tuple[str, str], dict]:
-    """(sample, post id) -> label values, for every coded item. A post can be in both samples."""
-    out = {}
-    for entry in index["batches"]:
-        post_of = {it["item_id"]: it["post_id"] for it in entry["items"]}
-        labels, _ = read_labels(study_dir / labels_file(entry["batch"]))
-        for lab in labels:
-            out[(entry["sample"], post_of[lab.item_id])] = lab.values
-    return out
 
 
 def measurement_records(study_dir: Path, codebook: Codebook, coded: dict) -> list[Record]:
@@ -128,7 +117,12 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
     coded = labelled(study_dir, read_index(study_dir))
     records = measurement_records(study_dir, codebook, coded)
     status_by, alpha, note = agreement(study_dir, lock, codebook)
+    checked = synthesis.check(study_dir, codebook, posts) if (study_dir / synthesis.SYNTHESIS).is_dir() else None
+    if checked and not checked["ok"]:
+        raise InputError(f"The synthesis has {len(checked['errors'])} error(s). Run crp validate, fix them, "
+                         "then analyse again.")
     inputs = [study_dir / f for f in (POSTS, MEASUREMENT, SUMMARY, INDEX, LABELS_LOCK, CODEBOOK, Path("study.yaml"), SIGNALS)]
+    inputs += sorted(p for p in (study_dir / synthesis.SYNTHESIS).glob("*") if p.is_file()) if checked else []
     with manifest.stage(study_dir, "analyse", inputs=inputs, seed=seed, codebook_version=codebook.version,
                         coder_model=lock["coder_model"]) as record:
         m = summary["measurement"]
@@ -144,6 +138,12 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
                                  "person_cap": m["frame"]["person_cap"], "thread_cap_pct": m["thread_cap_pct"],
                                  "thread_cap_loosened": m["thread_cap_pct"] != thresholds.THREAD_CAP_PCT},
                       "interviews": interviews(posts, codebook, coded)}
+        eng = None
+        signal_rows = {r["post_id"]: r for r in (json.loads(line) for line in
+                       (study_dir / SIGNALS).read_text(encoding="utf-8").splitlines() if line.strip())}
+        forum_said = [p for p in posts if p.source_type == "forum" and p.role == "participant"]
+        data["language"] = {"phrases": language.phrases([(p.text, p.person_code) for p in forum_said]),
+                            "signal_rates": language.signal_rates(posts, signal_rows)}
         if records:
             eng = Engine(records, draws, seed)
             data["headline"] = stats.headline(eng)
@@ -164,9 +164,20 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
                                    "reason": f"hidden: the sample is below the early-signal threshold "
                                              f"({thresholds.MIN_ITEMS_FOR_FULL} comments from "
                                              f"{thresholds.MIN_PEOPLE_FOR_RANGES} people) (D6)"}
+        warnings = checked["warnings"] if checked else []
+        if checked:
+            neg_rate = {a["aspect"]: a["negative_rate"].get("pct") for a in data.get("aspects", [])}
+            data["synthesis"] = synthesis.summarise(checked, neg_rate, codebook)
+            if checked["files"]["hypotheses"]:
+                scored = hypotheses.score(checked["files"]["hypotheses"], checked["nuggets"], eng, len(records),
+                                          n_people, draws, seed)
+                if scored["errors"]:
+                    raise InputError("Hypothesis signals don't fit the sample:\n" + "\n".join(scored["errors"]))
+                data["hypotheses"] = scored["hypotheses"]
+                warnings += scored["warnings"]
         results = validate(Results, data, "results.json")
         atomic_write_text(study_dir / RESULTS, json.dumps(results.model_dump(mode="json", exclude_none=True),
                                                           indent=2, ensure_ascii=False) + "\n")
         record["outputs"] = [str(RESULTS)]
         record["settings"] = {"draws": draws}
-    return {"results": results, "agreement_note": note}
+    return {"results": results, "agreement_note": note, "warnings": warnings}
