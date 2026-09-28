@@ -78,7 +78,8 @@ def guide(codebook: Codebook) -> str:
              "- Save the finished sheet as `human/human_labels.csv`. For a second coder, add their rows below yours.",
              ""]
     if codebook.instructions:
-        lines += ["## Rules", ""] + [f"- {r}" for r in codebook.instructions] + [""]
+        lines += ["## Rules", ""] + [f"- {r}" if isinstance(r, str) else f"- {r.text} ({r.applies_to} items only)"
+                                     for r in codebook.instructions] + [""]
     if codebook.aspects:
         lines += ["## Aspects", ""] + [f"- `{a}`" + (f": {codebook.aspect_definitions[a]}"
                                                     if a in codebook.aspect_definitions else "")

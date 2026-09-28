@@ -14,15 +14,19 @@ aspect_definitions:
 instructions:
 - Code every item, including dull ones.
 - 'Negation and shifters: "not bad" is mildly positive; "hardly works" is negative.'
-- 'But-clauses: the clause after "but" usually carries the overall score, while each
-  aspect keeps its own score.'
+- text: 'But-clauses: the clause after "but" usually carries the overall score, while
+    each aspect keeps its own score.'
+  applies_to: measurement
 - 'Implied opinions count: "search takes 10 seconds" is negative on search with no
   sentiment word.'
 - 'Sarcasm: "great, another price rise" is negative. If you can''t tell, score 0.'
 - 'Intensity: -2 and 2 need strong language, a severe consequence (lost work, cancelled,
   switched) or emphasis. Plain complaints are -1.'
-- Questions and help requests are usually 0 overall unless they carry a complaint.
-- 'Aspects: score only aspects the text evaluates. A bare mention isn''t an evaluation.'
+- text: Questions and help requests are usually 0 overall unless they carry a complaint.
+  applies_to: measurement
+- text: 'Aspects: score only aspects the text evaluates. A bare mention isn''t an
+    evaluation.'
+  applies_to: measurement
 variables:
 - name: overall
   description: The writer's evaluation of Quillnote, not their mood

@@ -199,13 +199,19 @@ class Variable(Strict):
         return self
 
 
+class Instruction(Strict):
+    """A coding rule for one sample only. A plain string in the list applies to both samples."""
+    text: NonEmpty
+    applies_to: Literal["measurement", "detail"]
+
+
 class Codebook(Strict):
     """studies/<id>/codebook.yaml"""
     version: NonEmpty
     study_type: StudyType
     aspects: list[Annotated[str, Field(pattern=r"^[a-z][a-z-]*( [a-z][a-z-]*)?$")]] = []
     aspect_definitions: dict[str, NonEmpty] = {}
-    instructions: list[NonEmpty] = []  # coding rules for every variable, e.g. the coding guide's judgement calls
+    instructions: list[NonEmpty | Instruction] = []  # coding rules, e.g. the coding guide's judgement calls (D34)
     parent_context: bool = True  # show the coder the post a comment replies to (or the question a turn answers)
     variables: list[Variable] = Field(min_length=1)
 
@@ -231,6 +237,11 @@ class Codebook(Strict):
                 if sorted(map(repr, gate.values)) != ["False", "True"]:
                     raise ValueError(f"variable '{v.name}' is required when '{v.required_when}', which isn't true/false")
         return self
+
+    def instructions_for(self, sample: str) -> list[str]:
+        """The rules a batch of this sample carries: its own, plus those for both samples (D34)."""
+        return [i if isinstance(i, str) else i.text for i in self.instructions
+                if isinstance(i, str) or i.applies_to == sample]
 
     def variable(self, name: str) -> Variable:
         for v in self.variables:

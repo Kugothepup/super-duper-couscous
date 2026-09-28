@@ -112,7 +112,7 @@ def build(study_dir: Path, size: int, seed: int) -> tuple[dict[str, str], dict]:
             raise InputError(f"The {sample} sample has {len(items)} posts, but the codebook has no variables "
                              f"with applies_to: {sample}.")
         order = rng.sample(items, len(items))
-        head = {"codebook_version": codebook.version, "instructions": codebook.instructions,
+        head = {"codebook_version": codebook.version, "instructions": codebook.instructions_for(sample),
                 "codebook": coder_codebook(codebook, variables), "output_format": output_format(variables)}
         for start in range(0, len(order), size):
             name = f"batch_{len(index['batches']) + 1:03d}"

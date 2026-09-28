@@ -6,7 +6,7 @@ import time
 import pytest
 import yaml
 
-from conftest import read_jsonl, write_labels
+from conftest import FIXTURE_STUDY, read_jsonl, write_labels
 from crp import manifest
 from crp.agreement import export, score
 from crp.batch import HEADER_FIELDS, ITEM_FIELDS, VARIABLE_FIELDS, make_batches
@@ -282,3 +282,20 @@ def test_cli_runs_every_coding_stage(batched, capsys):
     assert main(["agreement", "export", d, "--n", "20", "--measurement-n", "12"]) == 0
     assert "20 of 100 coded items (12 measurement, then 8 detail)" in capsys.readouterr().out
     assert main(["agreement", "score", d]) == 2 and "No human/human_labels.csv" in capsys.readouterr().err
+
+
+def test_each_batch_carries_only_its_own_samples_rules(batched):
+    lines = batch_lines(batched)
+    measurement, detail = lines["batch_001"][0]["instructions"], lines["batch_002"][0]["instructions"]
+    scoped = [r for r in measurement if "overall" in r or r.startswith("Aspects:")]
+    assert len(scoped) == 3  # the fixture's three rules for the measurement sample
+    assert not set(scoped) & set(detail)  # detail coders aren't told about variables they don't code (D34)
+    assert "Code every item, including dull ones." in measurement and "Code every item, including dull ones." in detail
+
+
+def test_a_rule_must_name_a_real_sample():
+    from crp.io import validate
+    from crp.schemas import Codebook
+    base = yaml.safe_load((FIXTURE_STUDY / "codebook.yaml").read_text())
+    with pytest.raises(InputError, match="applies_to"):
+        validate(Codebook, base | {"instructions": [{"text": "a rule", "applies_to": "both"}]}, "codebook")
