@@ -1,6 +1,6 @@
 # Community research pipeline
 
-A research tool that turns forum posts, screenshots and interview transcripts into traceable evidence: a dashboard, a report and prioritised hypotheses for discovery. Owner: Steeve. The method is described in `.claude/skills/interview-synthesis/SKILL.md` (renamed to `community-research` in Phase 7). The build is in `BUILD_PLAN.md`.
+A research tool that turns forum posts, screenshots and interview transcripts into traceable evidence: a dashboard, a report and prioritised hypotheses for discovery. Owner: Steeve. The method is run by the `community-research` skill (`.claude/skills/community-research/SKILL.md`, with guidance in its `reference/` folder). It replaces the `interview-synthesis` skill it was ported from, whose scripts are kept unchanged in `tests/reference/`. The build is in `BUILD_PLAN.md`.
 
 ## The one rule
 

@@ -233,7 +233,8 @@ def unseal(study_dir: Path) -> dict:
     data = locked(study_dir)
     src = study_dir / PRIOR
     if not src.exists():
-        raise InputError(f"No {PRIOR}. Steeve writes his prior there himself, before collection starts.")
+        raise InputError(f"No {PRIOR}: Steeve went in blind. There is nothing to unseal, so skip this step; "
+                         "every hypothesis will be formed from the data.")
     runs = manifest.read(study_dir)
     ingests = [r["started"] for r in runs if r.get("command") == "ingest" and r.get("status") == "ok"]
     modified = dt.datetime.fromtimestamp(src.stat().st_mtime, dt.timezone.utc)
