@@ -186,6 +186,29 @@ Rewrite `SKILL.md` as an orchestrator:
 
 ---
 
+## Phase 7b: Paste and rounds (D35, D36)
+
+- `crp paste`: turns a copied Reddit page into a capture file (from the one-off splitter used on the triple-lock threads), with tests on saved pages. It reports how many replies Reddit had collapsed, so they can be expanded and pasted again.
+- `crp status studies/<id>` (brought forward from Phase 8): each stage done, waiting on Steeve, waiting on Claude, or blocked, and why.
+- Stable sampling: each post's place in the draw comes from a hash of the seed and its post ID, so adding posts keeps most earlier picks.
+- `crp round studies/<id>`: keeps the current round in `rounds/<n>/`, takes in new captures, redraws, and batches only the posts that need coding. Labels are reused when text, codebook version, sample and coder model all match.
+- `crp analyse` adds round-to-round changes to results.json, and the dashboard and report show them.
+- `crp reset studies/<id>`: archives generated files, keeps `raw/` and the sealed prior.
+
+**Done when:** adding a thread to a fixture study keeps most earlier picks, only new picks are batched, reused labels are counted in the manifest, and a round comparison appears in the report with check-numbers passing.
+
+---
+
+## Phase 7c: Local page (D36)
+
+- `python -m crp ui` serves a page on 127.0.0.1: studies with their status, new study, paste or upload threads (runs paste, ingest, verify, anonymise and signals), approve the codebook, agreement coding one post at a time, and links to the shareable and internal builds.
+- Steps done by Claude show the line to type into Claude Code.
+- Tests: the server binds loopback only, refuses paths under `sealed/`, `.secrets` and anything outside the study, and each button runs the same code as its `crp` command.
+
+**Done when:** a new study can be created, threads added, the codebook approved and the agreement sheet coded from the page, with the same files and manifest records as the command line.
+
+---
+
 ## Phase 8: Hardening
 
 - End-to-end test on a fixture study from `crp new` to `crp build`.
