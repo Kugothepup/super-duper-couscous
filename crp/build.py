@@ -9,9 +9,10 @@ banner from the agreement status of the variables it rests on (D5, D25).
 The AI may write synthesis/summary.md: prose for the top of the report, with a placeholder such as
 {{ headline.negative.pct }} for every number. It is rendered in a sandbox with results.json as its context.
 
---shareable leaves out verbatim quotes, thread titles and person codes, and refuses to write if any
-six-word run from a post's text appears in the output. Writes results/dashboard.html and results/report.md,
-or results/shareable/ with --shareable.
+By default the outputs leave out verbatim quotes, thread titles and person codes, and the build refuses
+to write if any six-word run from a post's text appears in them (D33). They go to results/dashboard.html and
+results/report.md. --with-quotes writes an internal version that quotes posts to results/internal/, which
+is gitignored and carries a banner saying not to share it.
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ from crp.synthesis import SYNTHESIS, check
 from crp.text import shingles
 
 OUT = Path("results")
-SHAREABLE = OUT / "shareable"
+INTERNAL = OUT / "internal"  # --with-quotes: never shared or committed
 SUMMARY_PROSE = SYNTHESIS / "summary.md"
 SHINGLE = 6  # words: a run this long from a post counts as a quote
 
@@ -189,27 +190,28 @@ def visible_text(html: str) -> str:
     return re.sub(r"<[^>]+>", " ", html)
 
 
-def build(study_dir: Path, shareable: bool = False) -> dict:
+def build(study_dir: Path, with_quotes: bool = False) -> dict:
     study_dir = Path(study_dir)
+    shareable = not with_quotes
     ctx = context(study_dir, shareable)
     dashboard = environment(False).get_template("dashboard.html.j2").render(**ctx)
     report = re.sub(r"\n{3,}", "\n\n", environment(True).get_template("report.md.j2").render(**ctx)).strip() + "\n"
-    out_dir = study_dir / (SHAREABLE if shareable else OUT)
+    out_dir = study_dir / (INTERNAL if with_quotes else OUT)
     if shareable:
         posts = read_jsonl(study_dir / POSTS, Post)
         leaks = quoted_runs(visible_text(dashboard) + "\n" + report, posts)
         codes = sorted(set(re.findall(r"\bP-[0-9a-f]{8}\b", dashboard + report)))
         if leaks or codes:
-            raise InputError("The shareable build would still carry "
+            raise InputError("The build would still carry "
                              + (f"{len(leaks)} run(s) of six words quoted from posts (paraphrase the observations "
                                 f"that repeat them), e.g. \"{leaks[0]}\"" if leaks else "")
                              + ("; " if leaks and codes else "") + (f"person codes, e.g. {codes[0]}" if codes else "")
-                             + ". Nothing was written.")
+                             + ". Nothing was written. (crp build --with-quotes makes an internal version that may quote.)")
     inputs = [study_dir / RESULTS, study_dir / "study.yaml"] + sorted(p for p in (study_dir / SYNTHESIS).glob("*")
                                                                        if p.is_file())
-    with manifest.stage(study_dir, "build --shareable" if shareable else "build", inputs=inputs) as record:
+    with manifest.stage(study_dir, "build --with-quotes" if with_quotes else "build", inputs=inputs) as record:
         atomic_write_text(out_dir / "dashboard.html", dashboard)
         atomic_write_text(out_dir / "report.md", report)
         record["outputs"] = [str((out_dir / f).relative_to(study_dir)) for f in ("dashboard.html", "report.md")]
-    return {"dashboard": out_dir / "dashboard.html", "report": out_dir / "report.md", "shareable": shareable,
+    return {"dashboard": out_dir / "dashboard.html", "report": out_dir / "report.md", "with_quotes": with_quotes,
             "results_sha256": sha256_file(study_dir / RESULTS)}

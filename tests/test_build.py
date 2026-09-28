@@ -1,4 +1,4 @@
-"""crp build and crp check-numbers: outputs filled from results.json, banners, safe wording, shareable builds."""
+"""crp build and crp check-numbers: outputs filled from results.json, banners, safe wording, quote-free by default."""
 import json
 import re
 
@@ -133,32 +133,36 @@ def test_numbers_in_skips_ids_and_dates():
     assert numbers_in("(T01-p02, P-68388532, opinion) and P-0a1b2c3d") == []  # an all-digit person code is an id
 
 
-# ---- shareable ---------------------------------------------------------------
+# ---- quote-free by default (D33) ----------------------------------------------
 
-def test_shareable_build_has_no_quotes_titles_or_person_codes(analysed):
-    build(analysed, shareable=True)
-    d = analysed / "results" / "shareable"
+def test_default_build_has_no_quotes_titles_or_person_codes(analysed):
+    build(analysed)
+    d = analysed / "results"
     text = visible_text((d / "dashboard.html").read_text()) + "\n" + (d / "report.md").read_text()
     posts = read_jsonl(analysed / "posts.jsonl", Post)
     assert not quoted_runs(text, posts)
     everything = (d / "dashboard.html").read_text() + (d / "report.md").read_text()
     assert not re.search(r"\bP-[0-9a-f]{8}\b", everything)
     assert not {p.thread_title for p in posts if p.thread_title} & set(re.split(r"[:|\n]", everything))
-    # while the internal build does quote posts
-    build(analysed)
-    internal = visible_text((analysed / "results" / "dashboard.html").read_text())
-    assert quoted_runs(internal, posts)
+    assert "Internal build" not in everything
+    # while the internal build, kept apart, does quote posts and says so
+    build(analysed, with_quotes=True)
+    internal = (analysed / "results" / "internal" / "dashboard.html").read_text()
+    assert quoted_runs(visible_text(internal), posts) and "Internal build: it quotes posts" in internal
+    assert "Internal build" in (analysed / "results" / "internal" / "report.md").read_text()
+    assert (analysed / "results" / "dashboard.html").read_text() == (d / "dashboard.html").read_text()  # untouched
 
 
-def test_shareable_build_refuses_an_observation_that_copies_its_post(analysed):
+def test_build_refuses_an_observation_that_copies_its_post(analysed):
     posts = {p.post_id: p for p in read_jsonl(analysed / "posts.jsonl", Post)}
     rows = [json.loads(line) for line in (analysed / "synthesis" / "observations.jsonl").read_text().splitlines()]
     rows[0]["observation"] = posts[rows[0]["post_id"]].text  # copied, not paraphrased
     (analysed / "synthesis" / "observations.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     analyse(analysed, seed=3, draws=200)
     with pytest.raises(InputError, match="six words quoted from posts"):
-        build(analysed, shareable=True)
-    assert not (analysed / "results" / "shareable" / "dashboard.html").exists()
+        build(analysed)
+    assert not (analysed / "results" / "dashboard.html").exists()
+    build(analysed, with_quotes=True)  # the internal version may quote
 
 
 # ---- safe wording (D8, D11) --------------------------------------------------
@@ -200,7 +204,7 @@ def test_safe_wording_by_status():
 
 def test_cli_build_and_check_numbers(analysed, capsys):
     from crp.cli import main
-    assert main(["build", str(analysed)]) == 0 and "Internal build" in capsys.readouterr().out
+    assert main(["build", str(analysed)]) == 0 and "safe to share" in capsys.readouterr().out
     assert main(["check-numbers", str(analysed)]) == 0
     (analysed / "synthesis" / "summary.md").write_text("Roughly 12.5% said so.\n")
     main(["build", str(analysed)])

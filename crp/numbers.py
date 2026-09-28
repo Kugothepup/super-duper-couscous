@@ -1,7 +1,7 @@
 """crp check-numbers: every number shown in the report and the dashboard must come from results.json.
 
 Scans results/report.md and results/dashboard.html (its visible text and aria-labels), and the
-shareable build if there is one. A number is traceable if it matches, ignoring sign:
+internal --with-quotes build if there is one. A number is traceable if it matches, ignoring sign:
   - a number in results/results.json, as a value or inside one of its strings;
   - a number in study.yaml's text (the research questions, say);
   - one of the method's stated constants: the thresholds, the codebook's scale values;
@@ -28,7 +28,7 @@ import yaml
 from crp import hypotheses, keyness, stats, thresholds, wording
 from crp.anonymise import POSTS
 from crp.analyse import RESULTS
-from crp.build import OUT, SHAREABLE
+from crp.build import INTERNAL, OUT
 from crp.codebook import CODEBOOK
 from crp.io import InputError, read_jsonl
 from crp.schemas import Post
@@ -197,7 +197,7 @@ def check_numbers(study_dir: Path) -> dict:
     study_dir = Path(study_dir)
     if not (study_dir / RESULTS).exists():
         raise InputError("No results/results.json. Run crp analyse first.")
-    files = [study_dir / d / f for d in (OUT, SHAREABLE) for f in ("report.md", "dashboard.html") if (study_dir / d / f).exists()]
+    files = [study_dir / d / f for d in (OUT, INTERNAL) for f in ("report.md", "dashboard.html") if (study_dir / d / f).exists()]
     if not files:
         raise InputError("Nothing to check. Run crp build first.")
     allowed = traceable(study_dir)

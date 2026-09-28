@@ -32,6 +32,7 @@
 {#- ---------- verdict ---------- #}
 <header class="verdict" id="verdict">
   <div class="topline"><p class="subject">{{ lens.label }}: {{ study.subject }}. {{ sources|join(', ') }}{% if col.window %}, {{ col.window[0] }} to {{ col.window[1] }}{% endif %}</p><button class="theme-t" id="themeT" type="button">Light or dark</button></div>
+  {% if not shareable %}<p class="vbanner v-unverified">Internal build: it quotes posts word for word and shows person codes and thread titles. Don't share it; share the default build.</p>{% endif %}
   {{ vbanner("verdict") }}
   <h1>{{ verdict }}</h1>
   {% if study.stance_target %}<p class="proposition">On the proposition: {{ study.stance_target }}</p>{% endif %}
@@ -254,7 +255,7 @@
     {% if syn %}<dt>Evidence behind coded posts</dt><dd>{% for k, v in syn.evidence_mix.items() %}{{ k|label }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
     <dt>Direction</dt><dd>{{ "Several periods compared" if r.direction and r.direction.status == "ok" else "Snapshot: no trend can be claimed" }}</dd>
     {% if r.themes %}<dt>Topic clusters</dt><dd>separation score {{ r.themes.silhouette }} ({{ "loose" if r.themes.silhouette < 0.1 else "moderate" if r.themes.silhouette < 0.3 else "clear" }})</dd>{% endif %}
-    <dt>Quotes</dt><dd>{{ "Withheld. Evidence is paraphrased, with post ids that trace to source files kept privately." if shareable else "Included, for internal use only. Share the --shareable build." }}</dd>
+    <dt>Quotes</dt><dd>{{ "Withheld. Evidence is paraphrased, with post ids that trace to source files kept privately." if shareable else "Included, for internal use only. Share the default build instead." }}</dd>
     <dt>Who this describes</dt><dd>{{ study.population or "People who chose to post in these communities. They skew vocal and are not a sample of all users, customers or the public." }}</dd>
   </dl></div>
 {%- endif %}

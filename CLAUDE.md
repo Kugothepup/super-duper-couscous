@@ -30,7 +30,7 @@ Current thresholds (from the skill, keep unless told otherwise):
 
 - Raw posts, usernames and screenshots stay in `studies/*/raw/` and are gitignored. Only anonymised data (`posts.jsonl` with person codes) is committed, if anything is.
 - Person codes are salted HMACs. The salt lives in `.secrets/salt` and is never printed, logged or committed.
-- Outputs built with `--shareable` contain no verbatim quotes and no thread links.
+- Outputs contain no verbatim quotes, thread titles or person codes by default. `crp build --with-quotes` makes an internal version in `results/internal/`, which is gitignored and never shared (D33).
 - Interview transcripts are a separate source type. Never pool them into forum percentages.
 
 ## Working style

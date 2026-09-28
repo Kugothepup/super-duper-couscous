@@ -6,7 +6,9 @@ studies/*/human/
 # old codebook versions' files, which may include a human/ folder
 studies/*/superseded/
 
-# Outputs that may contain quotes (commit shareable builds deliberately if needed)
+# Internal builds quote posts (crp build --with-quotes): never commit them
+studies/*/results/internal/
+# Default builds are quote-free, but stay out of git unless committed deliberately
 studies/*/results/dashboard.html
 studies/*/results/report.md
 

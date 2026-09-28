@@ -10,6 +10,9 @@
 
 {% if col %}{{ col.forum_threads }} forum threads ({{ sources|join(", ") }}) · {{ col.forum_posts }} posts from {{ col.forum_people }} people{% if col.detail %} · {{ col.detail.selected }} read in detail{% endif %}{% if syn %} · {{ syn.observations }} observations · {{ syn.insights|length }} insights{% endif %}{% if r.interviews %} · interviews counted apart: {{ r.interviews.transcripts }} transcript(s), {{ r.interviews.participants }} participant(s){% endif %}{% endif %}
 
+{% if not shareable %}**Internal build: it quotes posts word for word and shows person codes and thread titles. Don't share it; share the default build.**
+
+{% endif %}
 {{ vline("verdict") }}
 
 {% if prose %}
@@ -228,4 +231,4 @@ Starting questions: {{ hy.next_step.questions|join(" / ") }}
 - Ranges come from {{ r.bootstrap_draws }} re-draws resampling people and threads, the wider shown. They describe this collection, not a wider population.
 - Forum posters are self-selected and skew towards people with strong feelings, often complaints. Treat findings as what an engaged, vocal group says, not what all users think.
 - People are counted, so one prolific poster counts once.
-- Ethics: posts are public but written for a community, not for research. {{ "This version leaves out quotes, thread titles and person codes." if shareable else "This internal version quotes posts; share only the --shareable build." }}
+- Ethics: posts are public but written for a community, not for research. {{ "This version leaves out quotes, thread titles and person codes." if shareable else "This internal version quotes posts; share only the default build." }}

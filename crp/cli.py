@@ -382,9 +382,9 @@ def cmd_view(args: argparse.Namespace) -> int:
 
 def cmd_build(args: argparse.Namespace) -> int:
     d = study_dir(args.study)
-    out = build(d, shareable=args.shareable)
-    kind = "Shareable build (no quotes, thread titles or person codes)" if out["shareable"] else \
-        "Internal build (quotes posts: don't share it; use --shareable)"
+    out = build(d, with_quotes=args.with_quotes)
+    kind = "Internal build (quotes posts: don't share it)" if out["with_quotes"] else \
+        "Build (no quotes, thread titles or person codes: safe to share)"
     print(f"{kind}:\n  {out['dashboard']}\n  {out['report']}")
     print("Next: crp check-numbers")
     return 0
@@ -518,7 +518,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("build", help="the dashboard and report, filled from results.json")
     p.add_argument("study")
-    p.add_argument("--shareable", action="store_true", help="leave out quotes, thread titles and person codes")
+    p.add_argument("--with-quotes", action="store_true",
+                   help="an internal version that quotes posts, in results/internal/ (never share it)")
     p.set_defaults(func=cmd_build)
 
     p = sub.add_parser("check-numbers", help="fail if any number shown doesn't trace to results.json")
