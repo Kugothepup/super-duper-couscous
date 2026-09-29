@@ -261,3 +261,34 @@ def test_the_range_draws_through_the_middle_of_each_step():
     assert drawn[0] == 0 and drawn[-1] == 3
     assert all(abs(a - b) <= 0.5 for a, b in zip(drawn, steps))
     assert all(a <= b for a, b in zip(drawn, drawn[1:]))  # still never falls
+
+
+def test_later_rounds_carry_earlier_human_codes_and_top_up_in_proportion(locked_round):
+    """D42: unchanged items keep Steeve's codes; the sheet adds new items in proportion to what's new."""
+    from crp.agreement import export, score
+    from test_agreement import ai_values, fill, save, sheet_rows
+    d = locked_round
+    export(d)
+    ai = ai_values(d)
+    first = fill(d, "steeve", lambda i: ai[i])
+    save(d, first)
+    start_round(d, "added a fifth thread")
+    add_thread(d)
+    rerun(d)
+    code_new_batches(d)
+    lock(d, MODEL)
+    out = export(d)
+    index = json.loads((d / "batches" / "index.json").read_text())
+    total = sum(len(b["items"]) for b in index["batches"])
+    new = sum(len(b["items"]) for b in index["batches"] if "reused" not in b)
+    assert out["carried_from"] == "rounds/1" and out["carried"] == len(first)  # every earlier item was unchanged
+    assert out["items"] == max(1, round(100 * new / total))
+    rows = sheet_rows(d)
+    filled, blank = [r for r in rows if r["coder"]], [r for r in rows if not r["coder"]]
+    assert len(filled) == out["carried"] and len(blank) == out["items"]
+    reused_ids = {it["item_id"] for b in index["batches"] if "reused" in b for it in b["items"]}
+    assert {r["item_id"] for r in filled} <= reused_ids and not {r["item_id"] for r in blank} & reused_ids
+    ai = ai_values(d)
+    save(d, filled + fill(d, "steeve", lambda i: ai[i], blank))
+    rep = score(d)
+    assert rep["items"] == out["carried"] + out["items"]

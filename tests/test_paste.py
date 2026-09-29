@@ -157,7 +157,7 @@ def test_paste_writes_a_capture_that_verifies(blank, no_ocr):
     opening, *replies = cap["posts"]
     # a link post's opening is its title, credited to whoever carries the OP badge, dated to the earliest comment
     assert opening == {"id": "p1", "author": "maple_owl", "date": "2026-06-30", "date_approx": True, "parent": None,
-                       "score": 12, "text": "Quillnote to raise prices again"}
+                       "score": 12, "text": "Quillnote to raise prices again", "headline": True}
     # the quoted paragraph is left out, and the quoted post becomes the parent
     assert replies[2]["parent"] == "p3"
     assert replies[2]["text"] == "It is only slow for big archives, mine with a few hundred notes is fine."
@@ -184,3 +184,35 @@ def test_cli_reports_what_was_skipped_and_collapsed(blank, tmp_path, capsys):
     assert main(["paste", str(blank), str(src), "--captured", "2026-09-28"]) == 0
     out = capsys.readouterr().out
     assert "5 posts" in out and "2 more replies" in out and "Next: crp ingest" in out
+
+
+def test_a_link_posts_headline_is_context_only(blank, no_ocr):
+    """D41: the headline stays in posts.jsonl as the thread's opening, but is never sampled."""
+    from crp.anonymise import anonymise
+    from crp.sample import candidates
+    from crp.schemas import Post
+    from crp.io import read_jsonl
+    paste(blank, LINK_POST, captured=CAPTURED)
+    self_post = paste(blank, SELF_POST, captured=CAPTURED)
+    ingest(blank)
+    verify(blank)
+    anonymise(blank, blank.parent / "secrets")
+    posts = read_jsonl(blank / "posts.jsonl", Post)
+    heads = [p for p in posts if p.headline]
+    assert [p.text for p in heads] == ["Quillnote to raise prices again"]
+    pool, left_out = candidates(posts)
+    assert left_out["headline"] == 1 and heads[0] not in pool
+    assert any(p.kind == "post" and not p.headline for p in pool)  # a text post's own body stays in
+    assert self_post["link_post"] is False
+
+
+def test_reddit_exports_mark_link_posts():
+    from crp.reddit import build_thread, item
+    link = item("post", "a1", None, "a1", "someone", "", "Paper says notes apps are dying", 10, 1760000000, "notetaking",
+                is_self=False)
+    ask = item("post", "b1", None, "b1", "someone", "", "Is anyone else losing edits?", 10, 1760000000, "notetaking",
+               is_self=True)
+    reply = item("comment", "c1", "t3_a1", "a1", "other", "I read it, and it is overblown.", "", 2, 1760000100,
+                 "notetaking")
+    assert build_thread([link, reply])[1][0]["headline"] is True
+    assert build_thread([ask])[1][0]["headline"] is False

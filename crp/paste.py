@@ -167,6 +167,8 @@ def to_capture(parsed: dict, source_file: str, captured: dt.date, search_term: s
     opening = parsed["title"] if parsed["link_post"] or not parsed["post_text"] else parsed["post_text"]
     posts = [{"id": "p1", "author": op, "date": min(dates) if dates else None, "date_approx": bool(dates),
               "parent": None, "score": parsed["post_votes"], "text": opening}]
+    if parsed["link_post"]:
+        posts[0]["headline"] = True  # the article's headline: context only, never sampled (D41)
     quoted = 0
     for c in parsed["comments"]:
         text, parent = split_quote(c["text"], posts)

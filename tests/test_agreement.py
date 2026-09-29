@@ -89,7 +89,8 @@ def test_sheet_holds_no_ai_labels(batched):
         rows = [json.loads(line) | {"rationale": "ZEBRA rationale"} for line in p.read_text().splitlines()]
         p.write_text("".join(json.dumps(r) + "\n" for r in rows))
     out = export(batched, n=50, measurement_n=20)
-    assert out == {"items": 50, "of": 102, "seed": index["seed"], "measurement": 20, "detail": 30}
+    assert out == {"items": 50, "of": 102, "seed": index["seed"], "measurement": 20, "detail": 30, "carried": 0,
+                   "carried_from": None}
     text = (batched / "human" / "agreement_sheet.csv").read_text()
     assert "ZEBRA" not in text
     sample_of = {it["item_id"]: b for b in index["batches"] for it in b["items"]}

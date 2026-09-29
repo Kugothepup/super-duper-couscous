@@ -75,10 +75,11 @@ def _score(v: object) -> int:
     return int(float(s)) if s.lstrip("-").replace(".", "", 1).isdigit() else 0
 
 
-def item(kind, rid, parent, link, author, body, title, score, created, sub) -> dict:
+def item(kind, rid, parent, link, author, body, title, score, created, sub, is_self=None) -> dict:
     return {"kind": kind, "rid": strip_prefix(rid), "parent": strip_prefix(parent) if parent else None,
             "parent_is_post": str(parent or "").startswith("t3_"), "link": strip_prefix(link),
             "author": author or "[deleted]", "body": body or "", "title": title or "", "score": _score(score),
+            "is_self": is_self,
             "created": to_time(created), "subreddit": sub or ""}
 
 
@@ -95,7 +96,7 @@ def walk_listing(node, out: list, stats: dict, link=None) -> None:
             walk_listing(c, out, stats, link)
     elif kind == "t3":
         out.append(item("post", d.get("id"), None, d.get("id"), d.get("author"), d.get("selftext"),
-                        d.get("title"), d.get("score"), d.get("created_utc"), d.get("subreddit")))
+                        d.get("title"), d.get("score"), d.get("created_utc"), d.get("subreddit"), d.get("is_self")))
     elif kind == "t1":
         out.append(item("comment", d.get("id"), d.get("parent_id"), d.get("link_id") or link,
                         d.get("author"), d.get("body"), None, d.get("score"), d.get("created_utc"),
@@ -109,7 +110,7 @@ def walk_listing(node, out: list, stats: dict, link=None) -> None:
 def from_flat(o: dict) -> dict:
     if "title" in o and not o.get("parent_id"):
         return item("post", o.get("id"), None, o.get("id"), o.get("author"), o.get("selftext"),
-                    o.get("title"), o.get("score"), o.get("created_utc"), o.get("subreddit"))
+                    o.get("title"), o.get("score"), o.get("created_utc"), o.get("subreddit"), o.get("is_self"))
     return item("comment", o.get("id"), o.get("parent_id"), o.get("link_id"), o.get("author"),
                 o.get("body"), None, o.get("score"), o.get("created_utc"), o.get("subreddit"))
 
@@ -187,6 +188,7 @@ def build_thread(items: list[dict]) -> tuple[dict | None, list[dict], int]:
         turns.append({"turn": len(turns) + 1, "parent_turn": parent_turn, "kind": it["kind"], "author": author,
                       "role": "unknown" if removed else "participant", "timestamp": it["created"],
                       "date_approx": False, "score": it["score"], "promotional": False,
+                      "headline": it["kind"] == "post" and it.get("is_self") is False and not clean_body(it["body"]),
                       "text": "[deleted]" if removed else text, "ref": it["rid"]})
         return len(turns)
 

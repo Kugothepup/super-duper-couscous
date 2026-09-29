@@ -102,6 +102,7 @@ class _PostBase(Strict):
     start_s: float | None = None  # interview recordings: seconds from the start
     end_s: float | None = None
     promotional: bool = False
+    headline: bool = False  # a link post's title: the article's words, kept as context only (D41)
     text: str
     capture_method: Literal["paste", "screenshot", "export", "transcript"]
     raw_ref: NonEmpty  # where the original sits in raw/, e.g. "forum_price.txt#p3"
@@ -132,6 +133,8 @@ class _PostBase(Strict):
             raise ValueError("a post can't reply to itself")
         if self.kind == "post" and self.parent_id is not None:
             raise ValueError("an opening post has no parent")
+        if self.headline and self.kind != "post":
+            raise ValueError("only an opening post can be a link post's headline")
         if self.date_approx and self.timestamp is None:
             raise ValueError("date_approx is set but there is no timestamp")
         return self

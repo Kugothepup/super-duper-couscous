@@ -113,10 +113,10 @@ def topup(study_dir: Path, post_ids: list[str], reason: str) -> dict:
                          "first (crp round --reason \"top-up: ...\"), then add the posts.")
     posts = {p.post_id: p for p in read_jsonl(study_dir / POSTS, Post)}
     have = {t["post_id"] for t in read_topup(study_dir)}
-    bad = [i for i in post_ids if i not in posts or posts[i].source_type != "forum"]
+    bad = [i for i in post_ids if i not in posts or posts[i].source_type != "forum" or posts[i].headline]
     if bad:
-        raise InputError(f"Not forum posts in posts.jsonl: {', '.join(bad)}. Top-ups are forum posts; interviews "
-                         "are read in full already.")
+        raise InputError(f"Not forum posts in posts.jsonl, or link-post headlines: {', '.join(bad)}. Top-ups are "
+                         "people's forum posts; interviews are read in full already.")
     new = [i for i in dict.fromkeys(post_ids) if i not in have]
     if not new:
         raise InputError("Those posts are already top-ups.")

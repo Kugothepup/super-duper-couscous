@@ -160,7 +160,7 @@ def cmd_signals(args: argparse.Namespace) -> int:
 
 
 def left_out_text(left_out: dict[str, int], min_words: int) -> str:
-    words = {"promotional": "promotional", "echo_reply": "short echo replies",
+    words = {"promotional": "promotional", "echo_reply": "short echo replies", "headline": "link-post headlines",
              "short": f"comments under {min_words} words", "removed_or_unknown": "removed or unattributed"}
     return ", ".join(f"{words[k]} {n}" for k, n in left_out.items())
 
@@ -340,9 +340,16 @@ def cmd_unseal(args: argparse.Namespace) -> int:
 def cmd_agreement_export(args: argparse.Namespace) -> int:
     d = study_dir(args.study)
     rep = agreement.export(d, n=args.n, measurement_n=args.measurement_n, seed=args.seed)
-    print(f"Wrote {d}/human/agreement_sheet.csv: {rep['items']} of {rep['of']} coded items ({rep['measurement']} "
-          f"measurement, then {rep['detail']} detail), seed {rep['seed']}, no AI labels. The codebook for the "
-          "human coder is in human/agreement_guide.md.")
+    if rep["carried_from"]:
+        print(f"Wrote {d}/human/agreement_sheet.csv. {rep['carried']} item(s) keep your codes from "
+              f"{rep['carried_from']}: the coder saw them unchanged, so their rows are filled in. To code: "
+              f"{rep['items']} new item(s) ({rep['measurement']} measurement, then {rep['detail']} detail), drawn in "
+              f"proportion to what's new this round, seed {rep['seed']}, no AI labels. The codebook is in "
+              "human/agreement_guide.md.")
+    else:
+        print(f"Wrote {d}/human/agreement_sheet.csv: {rep['items']} of {rep['of']} coded items ({rep['measurement']} "
+              f"measurement, then {rep['detail']} detail), seed {rep['seed']}, no AI labels. The codebook for the "
+              "human coder is in human/agreement_guide.md.")
     print("Stop here: Steeve codes the sheet and saves it as human/human_labels.csv. Then: crp agreement score")
     return 0
 

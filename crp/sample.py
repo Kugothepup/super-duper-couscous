@@ -3,7 +3,8 @@
 Measurement sample (samples/measurement.jsonl): a random sample of forum posts. Every percentage
 comes from it, and interviews never enter it (D14). The frame is triage.py's candidate pool:
 participant posts, leaving out promotional posts, short "same here" echo replies and comments
-under 8 words (opening posts are kept however short). Then two caps:
+under 8 words (opening posts are kept however short), and a link post's title, which is the article's
+headline rather than anyone's view and stays only as context for the replies (D41). Then two caps:
   person cap (D9, D23)  at most 5 posts per person in the frame, opening posts included. A person
                         with more keeps a random 5.
   thread cap (D2, D22)  no thread supplies more than 10% of the sample drawn. The sample is the
@@ -81,6 +82,8 @@ def candidates(posts: list[Post], min_words: int = thresholds.MIN_WORDS) -> tupl
             continue
         if p.role != "participant":
             left_out["removed_or_unknown"] += 1
+        elif p.headline:
+            left_out["headline"] += 1
         elif p.promotional:
             left_out["promotional"] += 1
         elif p.kind != "post" and is_echo(p.text):

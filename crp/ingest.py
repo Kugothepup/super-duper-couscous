@@ -78,7 +78,8 @@ def to_rows(threads: list[Thread], prefix: str, source_type: str, ids: dict) -> 
                     "parent_id": f"{tid}-{letter}{num[t['parent_turn']]:02d}" if t["parent_turn"] else None,
                     "author": t["author"], "role": t["role"], "kind": t["kind"], "timestamp": t["timestamp"],
                     "date_approx": t["date_approx"], "score": t["score"], "start_s": t.get("start_s"),
-                    "end_s": t.get("end_s"), "promotional": t["promotional"], "text": t["text"],
+                    "end_s": t.get("end_s"), "promotional": t["promotional"], "headline": t.get("headline", False),
+                    "text": t["text"],
                     "capture_method": th.capture_method, "raw_ref": t["ref"]}
             rows.append(validate(IngestedPost, data, f"{t['ref']}"))
     return rows

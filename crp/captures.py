@@ -142,6 +142,7 @@ def read_captures(raw: Path) -> tuple[list[Thread], dict]:
                              "timestamp": dt.datetime.combine(d, dt.time(12, 0)) if d else None,
                              "date_approx": bool(p.get("date_approx")) and d is not None,
                              "score": p.get("score"), "promotional": is_promotional(p["text"]),
+                             "headline": bool(p.get("headline")) and p is cap["posts"][0],
                              "text": p["text"], "ref": f"{cap['source_file']}#{p['id']}"})
         threads.append(th)
     report = {"capture_files": len(loaded), "duplicates_dropped": dict(dropped), "warnings": warnings,

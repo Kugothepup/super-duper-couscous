@@ -15,6 +15,12 @@ and "stance". Each gets its own status from the thresholds. There is no single s
 status: each section of the outputs takes the lowest status of the variables it rests on
 (section_status), and is unverified if any of them wasn't checked (D25).
 A confusion table compares the AI's and each human's `overall` codes. Writes results/agreement.json.
+
+Later rounds (D42): when the last round has human codes under the same frozen codebook, every item the
+coder would see unchanged keeps them (its rows come filled in on the new sheet), and the sheet adds a
+random draw from this round's newly coded items, in proportion to the share of the round that is new
+(n times new over all coded, at least one), split between the samples as above. So the check covers
+the whole round, and Steeve only codes what's new.
 """
 from __future__ import annotations
 
@@ -28,7 +34,8 @@ import krippendorff
 import numpy as np
 
 from crp import manifest, thresholds
-from crp.batch import BATCHES, read_index, labels_file
+from crp.batch import BATCHES, item_key, read_index, labels_file
+from crp.sample import last_round
 from crp.codebook import CODEBOOK, frozen
 from crp.io import InputError, atomic_write_text, validate
 from crp.labels import LABELS_LOCK, batch_items, check_values, locked, member, read_labels
@@ -64,10 +71,14 @@ def batch_texts(study_dir: Path, index: dict) -> dict[str, dict]:
     return out
 
 
-def guide(codebook: Codebook) -> str:
+def guide(codebook: Codebook, carried_from: str | None = None) -> str:
     lines = [f"# Agreement coding guide (codebook version {codebook.version})", "",
              "Code each row of `agreement_sheet.csv` from its text alone, as the blind coder did. `parent_text` "
-             "is context only: never code it. Don't look at the AI's labels until you have finished.", "",
+             "is context only: never code it. Don't look at the AI's labels until you have finished.", ""]
+    if carried_from:
+        lines += [f"Rows that already have a coder and codes carry your codes from {carried_from}: the coder saw "
+                  "those items unchanged this round. Leave them as they are, and code the blank rows.", ""]
+    lines += [
              "## Filling in the sheet", "",
              "- Put your name in `coder` on every row.",
              f"- Fill every variable column that doesn't say {NA}.",
@@ -104,6 +115,30 @@ def quotas(n: int, measurement_n: int, have_m: int, have_d: int) -> tuple[int, i
     return min(n - d, have_m), d
 
 
+def earlier_codes(study_dir: Path, codebook_sha: str, cols: list[str]) -> tuple[dict[str, list[dict]], str | None]:
+    """{item key: the last round's human rows for it}, if that round was human-coded under this codebook (D42)."""
+    prev = last_round(study_dir)
+    if prev is None or not (prev / HUMAN).exists() or not (prev / LABELS_LOCK).exists():
+        return {}, None
+    if json.loads((prev / LABELS_LOCK).read_text(encoding="utf-8"))["codebook_sha256"] != codebook_sha:
+        return {}, None
+    index = json.loads((prev / "batches" / "index.json").read_text(encoding="utf-8"))
+    key_of = {}
+    for entry in index["batches"]:
+        for line in (prev / BATCHES / f"{entry['batch']}.jsonl").read_text(encoding="utf-8").splitlines()[1:]:
+            item = json.loads(line)
+            key_of[item["item_id"]] = item_key(entry["sample"], codebook_sha, item)
+    out: dict[str, list[dict]] = {}
+    with (prev / HUMAN).open(encoding="utf-8-sig", newline="") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames != cols:
+            return {}, None
+        for row in reader:
+            if row.get("coder", "").strip() and row["item_id"] in key_of:
+                out.setdefault(key_of[row["item_id"]], []).append(row)
+    return out, str(prev.relative_to(study_dir))
+
+
 def export(study_dir: Path, n: int = SAMPLE_SIZE, measurement_n: int = MEASUREMENT_ITEMS,
            seed: int | None = None) -> dict:
     study_dir = Path(study_dir)
@@ -115,14 +150,26 @@ def export(study_dir: Path, n: int = SAMPLE_SIZE, measurement_n: int = MEASUREME
     seed = index["seed"] if seed is None else seed
     items = batch_texts(study_dir, index)
     sample_of = {it["item_id"]: b["sample"] for b in index["batches"] for it in b["items"]}
-    pools = {s: sorted(i for i in items if sample_of[i] == s) for s in ("measurement", "detail")}
+    cols = columns(codebook)
+    earlier, source = earlier_codes(study_dir, index["codebook_sha256"], cols)
+    carried = {i: earlier[k] for i in items if (k := item_key(sample_of[i], index["codebook_sha256"], items[i])) in earlier}
+    fresh = {it["item_id"] for b in index["batches"] if "reused" not in b for it in b["items"]} - carried.keys()
+    if source:  # a later round: keep the earlier codes, and add new items in proportion to what's new (D42)
+        n = max(1, round(n * len(fresh) / len(items))) if fresh else 0
+        measurement_n = round(n * measurement_n / SAMPLE_SIZE)
+        candidates = fresh
+    else:
+        candidates = set(items)
+    pools = {s: sorted(i for i in candidates if sample_of[i] == s) for s in ("measurement", "detail")}
     take = dict(zip(pools, quotas(n, measurement_n, len(pools["measurement"]), len(pools["detail"]))))
     rng = random.Random(seed)
     chosen = [i for s, pool in pools.items() for i in rng.sample(pool, take[s])]
-    cols = columns(codebook)
     buf = io.StringIO()
     w = csv.writer(buf, lineterminator="\n")
     w.writerow(cols)
+    for item_id in sorted(carried, key=lambda i: (sample_of[i] != "measurement", i)):
+        for old in carried[item_id]:
+            w.writerow([item_id] + [old[c] for c in cols[1:]])
     for item_id in chosen:
         item = items[item_id]
         row = [item_id, "", item["text"], item.get("parent_text", "")]
@@ -138,12 +185,15 @@ def export(study_dir: Path, n: int = SAMPLE_SIZE, measurement_n: int = MEASUREME
     with manifest.stage(study_dir, "agreement export", inputs=[study_dir / CODEBOOK], seed=seed,
                         codebook_version=codebook.version) as record:
         atomic_write_text(old, sheet)
-        atomic_write_text(study_dir / GUIDE, guide(codebook) + "\n")
+        atomic_write_text(study_dir / GUIDE, guide(codebook, source) + "\n")
         record["items"] = chosen
         record["settings"] = {"n": n, "measurement_n": measurement_n}
+        record["carried"] = len(carried)
+        if source:
+            record["carried_from"] = source
         record["outputs"] = [str(SHEET), str(GUIDE)]
     return {"items": len(chosen), "of": len(items), "seed": seed, "measurement": take["measurement"],
-            "detail": take["detail"]}
+            "detail": take["detail"], "carried": len(carried), "carried_from": source}
 
 
 # ---- reading the human codes -------------------------------------------------

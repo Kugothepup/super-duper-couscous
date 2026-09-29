@@ -151,6 +151,8 @@ crp agreement score studies/<id>
 
 Until it's scored, every section carries the red "unverified" banner. If Steeve says so, go on to stages 6 and 7 while he codes.
 
+In a later round, the sheet comes with Steeve's earlier codes filled in for every item the coder saw unchanged. He only codes the new rows, a share in proportion to what's new this round (D42).
+
 ### 6. First analysis
 
 ```

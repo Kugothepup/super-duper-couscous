@@ -40,6 +40,7 @@ One per paste or screenshot:
 - **score**: likes or upvotes if the page shows them, else null.
 - **search_query**: the search that found the thread, if known. It feeds the leave-one-out check by search term.
 - A comment with no text (deleted, or only an image) is skipped.
+- **headline**: set `"headline": true` on the opening post when it's a link post's title, the article's headline rather than the poster's words. It stays as context for the replies but is never sampled (D41). `crp paste` sets it for you.
 
 ### Pasted Reddit pages
 
@@ -48,7 +49,7 @@ Use `crp paste studies/<id> page.txt` (or `-` to read the paste from standard in
 - Ads, bots, deleted and image-only comments are skipped and counted.
 - Quoted text at the top of a reply is left out, and the reply's parent is set to the post it quotes.
 - Relative times are converted from `--captured` (default: today).
-- The opening post is the post's own text, or the thread title when it links to another page.
+- The opening post is the post's own text, or the thread title when it links to another page, marked as a headline (context only, D41).
 
 It also counts the replies Reddit had collapsed ("N more replies", "Continue this thread"). Tell Steeve, so he can expand them on the page and paste again with `--replace`; the earlier paste is kept in `raw/replaced/`. If a page's layout isn't recognised, write the capture by hand.
 
