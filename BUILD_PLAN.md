@@ -188,7 +188,10 @@ Rewrite `SKILL.md` as an orchestrator:
 
 ## Phase 7b: Paste and rounds (D35, D36)
 
-- `crp paste`: turns a copied Reddit page into a capture file (from the one-off splitter used on the triple-lock threads), with tests on saved pages. It reports how many replies Reddit had collapsed, so they can be expanded and pasted again.
+- `crp paste`: turns a copied Reddit page into a capture file, ported from ux-t's `forum_source.py` (both page layouts, badges, votes, ads, bots, deleted and image-only posts), with tests on saved pages (D38). Names stay in `raw/` until `crp anonymise`, and `crp verify` checks every post as now. It reports how many replies Reddit had collapsed, so they can be expanded and pasted again.
+- `crp anonymise` also replaces usernames mentioned in post text without `u/` or `@` (D38).
+- "Have we heard enough?": `crp analyse` computes the smoothed build-up of observation tags over random reading orders, and the dashboard and report draw it (D39).
+- The skill asks before reading interview transcripts, since what Claude Code reads goes to Anthropic's cloud (D38).
 - `crp status studies/<id>` (brought forward from Phase 8): each stage done, waiting on Steeve, waiting on Claude, or blocked, and why.
 - Stable sampling: each post's place in the draw comes from a hash of the seed and its post ID, so adding posts keeps most earlier picks.
 - `crp round studies/<id>`: keeps the current round in `rounds/<n>/`, takes in new captures, redraws, and batches only the posts that need coding. Labels are reused when text, codebook version, sample and coder model all match.
@@ -201,6 +204,7 @@ Rewrite `SKILL.md` as an orchestrator:
 
 ## Phase 7c: Local page (D36)
 
+- Follows ux-t's studio design (D38): a Next box, copy-paste prompts for Claude Code, and earlier synthesis versions kept with restore. It refuses requests from other websites (Origin and Sec-Fetch-Site) and other host names.
 - `python -m crp ui` serves a page on 127.0.0.1: studies with their status, new study, paste or upload threads (runs paste, ingest, verify, anonymise and signals), approve the codebook, agreement coding one post at a time, and links to the shareable and internal builds.
 - Steps done by Claude show the line to type into Claude Code.
 - Tests: the server binds loopback only, refuses paths under `sealed/`, `.secrets` and anything outside the study, and each button runs the same code as its `crp` command.
@@ -229,4 +233,5 @@ Run one real pitch dataset. Steeve codes the agreement sheet. Record in DECISION
 ## Later (not now)
 
 - **API coder:** `crp code --api` calls the Anthropic API directly with a pinned model and fixed settings, and logs model ID and prompt hash per batch. This gives fully repeatable labels and stronger blinding than an agent inside the session.
+- **Uncoded posts near a theme:** ux-t's local embedding map lists uncoded posts close to a theme. It could suggest candidates for D37's logged top-up, but needs Ollama and a local model.
 - **Held-back half:** for large datasets, seal a random 50% at sampling time to test hypotheses the data suggested.
