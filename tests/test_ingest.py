@@ -127,3 +127,37 @@ def test_docx_interview(tmp_path):
     rows = read_jsonl(tmp_path / "raw" / "ingested.jsonl")
     assert [(r["role"], r["text"]) for r in rows] == [
         ("interviewer", "What do you use it for?"), ("participant", "Mostly lecture notes. And recipes.")]
+
+
+def _ids_by_text(study) -> dict[str, str]:
+    return {r["text"]: r["post_id"] for r in read_jsonl(study / "raw" / "ingested.jsonl")}
+
+
+def test_numbers_are_kept_when_threads_and_posts_are_added(study):
+    """D35: a later ingest keeps every earlier thread and post number, and numbers new ones after them."""
+    ingest(study)
+    before = _ids_by_text(study)
+    # a new thread whose first post is older than every other thread's
+    (study / "raw" / "early.txt").write_text("An early thread\nFirst post of an early thread about Quillnote.\n"
+                                             "A reply in the early thread that says search is slow.\n")
+    (study / "raw" / "capture" / "early.json").write_text(json.dumps({
+        "source_file": "early.txt", "site": "Quillnote community forum", "captured": "2026-09-20",
+        "thread_title": "An early thread", "posts": [
+            {"id": "p1", "author": "early_bird", "date": "2026-01-01", "text": "First post of an early thread about Quillnote."},
+            {"id": "p2", "author": "late_owl", "date": "2026-01-02", "parent": "p1",
+             "text": "A reply in the early thread that says search is slow."}]}))
+    # a fuller paste of an existing thread: one more reply in the middle
+    cap_path = study / "raw" / "capture" / "pro_price.json"
+    cap = json.loads(cap_path.read_text())
+    cap["posts"].insert(2, {"id": "p99", "author": "new_voice", "date": "2026-04-03", "parent": cap["posts"][0]["id"],
+                            "text": "A reply that the first paste had collapsed."})
+    cap_path.write_text(json.dumps(cap))
+    ingest(study)
+    after = _ids_by_text(study)
+    assert all(after[text] == pid for text, pid in before.items())
+    assert after["First post of an early thread about Quillnote."] == "T05-p01"
+    first_thread = before[cap["posts"][0]["text"]].split("-")[0]
+    assert after["A reply that the first paste had collapsed."] == f"{first_thread}-p11"
+    rows = read_jsonl(study / "raw" / "ingested.jsonl")
+    assert [r["thread_id"] for r in rows if r["source_type"] == "forum"] == sorted(
+        r["thread_id"] for r in rows if r["source_type"] == "forum")

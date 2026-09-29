@@ -5,6 +5,9 @@ studies/*/sealed/
 studies/*/human/
 # old codebook versions' files, which may include a human/ folder
 studies/*/superseded/
+# earlier rounds and reset archives hold human/ folders and builds too (D35, D40)
+studies/*/rounds/
+studies/*/archive/
 
 # Internal builds quote posts (crp build --with-quotes): never commit them
 studies/*/results/internal/

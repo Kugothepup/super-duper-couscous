@@ -41,9 +41,16 @@ One per paste or screenshot:
 - **search_query**: the search that found the thread, if known. It feeds the leave-one-out check by search term.
 - A comment with no text (deleted, or only an image) is skipped.
 
-### Pasted Reddit pages (new Reddit, desktop)
+### Pasted Reddit pages
 
-A copied thread page reads, for each comment: the name, `•`, a time such as `21d ago`, the text, then the score. A moderator or the opening poster has `MOD` or `OP` between the name and the `•`. The thread title is the first line; make it post `p1` with no author, dated to the earliest comment. Collapsed replies show as "N more replies" or "Continue this thread". Count them, and tell Steeve that the paste is missing that many comments, so he can expand them and paste again. Phase 7b turns this into `crp paste`.
+Use `crp paste studies/<id> page.txt` (or `-` to read the paste from standard input). It saves the page as `raw/<name>.txt` and writes its capture file, following the rules above:
+- Names and links stay as shown.
+- Ads, bots, deleted and image-only comments are skipped and counted.
+- Quoted text at the top of a reply is left out, and the reply's parent is set to the post it quotes.
+- Relative times are converted from `--captured` (default: today).
+- The opening post is the post's own text, or the thread title when it links to another page.
+
+It also counts the replies Reddit had collapsed ("N more replies", "Continue this thread"). Tell Steeve, so he can expand them on the page and paste again with `--replace`; the earlier paste is kept in `raw/replaced/`. If a page's layout isn't recognised, write the capture by hand.
 
 ### Screenshots
 

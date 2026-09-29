@@ -26,7 +26,7 @@ from jinja2.sandbox import SandboxedEnvironment
 
 from crp import manifest, thresholds, wording
 from crp.agreement import section_status
-from crp.analyse import RESULTS
+from crp.analyse import HEARD_BAND, RESULTS
 from crp.anonymise import POSTS
 from crp.codebook import frozen
 from crp.hypotheses import LEAN_AGAINST, LEAN_FOR
@@ -44,27 +44,27 @@ LENSES = {  # _common.LENSES, without Outlook (D1) and with interviews counted a
     "product": {"label": "Product", "aspect_word": "feature or aspect", "jtbd": True, "stance": False,
                 "entity_title": "Alternatives in play",
                 "entity_lede": "Products people mention, and the forces attached to those mentions.",
-                "sections": ["verdict", "drivers", "direction", "themes", "pains", "successes", "jobs", "opportunities",
+                "sections": ["verdict", "drivers", "direction", "themes", "heard", "pains", "successes", "jobs", "opportunities",
                              "entities", "interviews", "language", "hypotheses", "trust"],
                 "names": {"drivers": "What drives sentiment", "themes": "Themes", "pains": "Pain points",
                           "successes": "Success moments", "opportunities": "Opportunities"}},
     "brand": {"label": "Brand", "aspect_word": "brand association", "jtbd": False, "stance": False,
               "entity_title": "Competitors and comparisons",
               "entity_lede": "Brands people compare with, and whether mentions pull towards or push away.",
-              "sections": ["verdict", "drivers", "associations", "direction", "themes", "pains", "successes", "jobs",
+              "sections": ["verdict", "drivers", "associations", "direction", "themes", "heard", "pains", "successes", "jobs",
                            "opportunities", "entities", "interviews", "language", "hypotheses", "trust"],
               "names": {"drivers": "What shapes perception", "themes": "Themes",
                         "pains": "Where the brand lets people down", "successes": "Moments of advocacy",
                         "opportunities": "Opportunities"}},
     "news": {"label": "News story", "aspect_word": "sub-topic, claim or actor", "jtbd": False, "stance": True,
              "entity_title": "Actors and organisations", "entity_lede": "Who people talk about in connection with the story.",
-             "sections": ["verdict", "stance", "drivers", "direction", "themes", "framing", "questions", "entities",
+             "sections": ["verdict", "stance", "drivers", "direction", "themes", "heard", "framing", "questions", "entities",
                           "opportunities", "interviews", "language", "hypotheses", "trust"],
              "names": {"drivers": "What drives the reaction", "themes": "Narratives", "pains": "Concerns",
                        "successes": "Positive reactions", "opportunities": "Implications"}},
     "topic": {"label": "Topic or issue", "aspect_word": "sub-topic or argument", "jtbd": False, "stance": True,
               "entity_title": "Actors and organisations", "entity_lede": "Who people bring into the discussion.",
-              "sections": ["verdict", "stance", "drivers", "direction", "themes", "framing", "questions", "pains",
+              "sections": ["verdict", "stance", "drivers", "direction", "themes", "heard", "framing", "questions", "pains",
                            "entities", "opportunities", "interviews", "language", "hypotheses", "trust"],
               "names": {"drivers": "What drives opinion", "themes": "Narratives", "pains": "Concerns",
                         "successes": "Positive reactions", "opportunities": "Implications"}},
@@ -74,7 +74,8 @@ DEFAULT_NAMES = {"verdict": "Summary", "stance": "Where people stand", "drivers"
                  "pains": "Pain points", "successes": "Success moments", "jobs": "Jobs to be done",
                  "opportunities": "Opportunities", "framing": "How the story is framed",
                  "questions": "Questions people ask", "interviews": "Interviews", "language": "Language used",
-                 "trust": "How much to trust this", "hypotheses": "Hypotheses for discovery"}
+                 "trust": "How much to trust this", "hypotheses": "Hypotheses for discovery",
+                 "heard": "Have we heard enough?"}
 # the coded variables each section rests on, for its verification banner (D25); "@aspects" is the per-aspect one
 SECTION_VARIABLES = {"verdict": ["overall"], "stance": ["stance"], "drivers": ["overall", "@aspects"],
                      "associations": ["@aspects"], "direction": ["overall"], "themes": ["evidence_type"],
@@ -82,7 +83,7 @@ SECTION_VARIABLES = {"verdict": ["overall"], "stance": ["stance"], "drivers": ["
                      "jobs": ["jtbd_force"], "framing": ["frame"], "questions": [],
                      "opportunities": ["friction", "severity", "aspect"], "entities": ["jtbd_force", "sentiment"],
                      "interviews": ["jtbd_force", "evidence_type", "friction", "severity", "aspect"],
-                     "language": ["overall"], "hypotheses": ["overall", "@aspects"]}
+                     "language": ["overall"], "hypotheses": ["overall", "@aspects"], "heard": []}
 FORCE_LABEL = {"push": "Push (pain with the current way)", "pull": "Pull (attraction of a new way)",
                "anxiety": "Anxiety (worry about switching)", "habit": "Habit (comfort of the status quo)"}
 
@@ -112,6 +113,44 @@ def banner(r: dict, codebook, section: str) -> dict | None:
                 f"{f', below {thresholds.ALPHA_TENTATIVE} or not checked for every variable' if alphas else ''}. "
                 "Don't rely on these results yet.")
     return {"status": status, "text": text}
+
+
+def through_steps(values: list[float]) -> list[float]:
+    """A step line redrawn through the middle of each step, so a range of whole numbers draws smoothly. It
+    stays within half a step of the original, and keeps the first and last points."""
+    n = len(values)
+    knots = [(0, values[0])] + [(k - 0.5, (values[k - 1] + values[k]) / 2) for k in range(1, n)
+                                if values[k] != values[k - 1]] + [(n - 1, values[-1])]
+    out, j = [], 0
+    for k in range(n):
+        while j + 1 < len(knots) - 1 and knots[j + 1][0] <= k:
+            j += 1
+        (x0, y0), (x1, y1) = knots[j], knots[j + 1]
+        out.append(y0 if x1 == x0 else y0 + (y1 - y0) * (k - x0) / (x1 - x0))
+    return out
+
+
+def curve(he: dict | None, width: int = 560, height: int = 240) -> dict | None:
+    """SVG coordinates for the heard-enough curve: the average order as a line, the range as a band.
+    Drawing only: every number the page prints comes from results.json."""
+    if not he:
+        return None
+    left, right, top, bottom = 44, width - 20, 20, height - 40
+    n, t = he["posts"], he["topics"]
+
+    def x(k: int) -> float:
+        return round(left + k / (n - 1) * (right - left), 1)
+
+    def y(v: float) -> float:
+        return round(bottom - v / t * (bottom - top), 1)
+
+    line = "M" + " L".join(f"{x(k)},{y(v)}" for k, v in enumerate(he["mean"]))
+    high = [max(v, m) for v, m in zip(through_steps(he["high"]), he["mean"])]
+    low = [min(v, m) for v, m in zip(through_steps(he["low"]), he["mean"])]
+    band = "M" + " L".join(f"{x(k)},{y(v)}" for k, v in enumerate(high)) + " L" + \
+        " L".join(f"{x(k)},{y(v)}" for k, v in reversed(list(enumerate(low)))) + " Z"
+    return {"line": line, "band": band, "left": left, "right": right, "top": top, "bottom": bottom,
+            "width": width, "height": height}
 
 
 def context(study_dir: Path, shareable: bool) -> dict:
@@ -147,7 +186,8 @@ def context(study_dir: Path, shareable: bool) -> dict:
                "associations": study.type == "brand", "direction": True, "themes": True, "pains": True,
                "successes": True, "jobs": True, "framing": True, "questions": True, "opportunities": True,
                "entities": bool((r.get("synthesis") or {}).get("products")), "interviews": bool(r["interviews"]),
-               "language": bool(r["language"]), "hypotheses": bool(r["hypotheses"]), "trust": True}
+               "language": bool(r["language"]), "hypotheses": bool(r["hypotheses"]), "trust": True,
+               "heard": bool(r.get("heard_enough"))}
     sections = [(s, lens["names"].get(s) or (lens["entity_title"] if s == "entities" else DEFAULT_NAMES[s]))
                 for s in lens["sections"] if present.get(s)]
     prose = None
@@ -161,6 +201,7 @@ def context(study_dir: Path, shareable: bool) -> dict:
     friction = sorted((n for n in nuggets.values() if n.codes.get("friction") is True),
                       key=lambda n: (-(n.codes.get("severity") or 0), -(n.post.score or 0)))
     return {"r": r, "study": study, "lens": lens, "sections": sections, "shareable": shareable, "ev": ev,
+            "curve": curve(r.get("heard_enough")), "heard_band": HEARD_BAND,
             "banner": lambda s: banner(r, codebook, s), "verdict": wording.verdict(r, study),
             "safe": wording.safe_wording(r, study, sources), "population_note": wording.population_note(study),
             "sources": sources, "prose": prose, "force_label": FORCE_LABEL, "friction": [n.post.post_id for n in friction[:10]],

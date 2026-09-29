@@ -33,6 +33,8 @@ Each section carries the status of the variables it rests on (D25). Don't descri
 - Never write "proves", "confirms" or "disproves". Write "leans for", "leans against", "mixed" or "can't tell from this data".
 - A result a single thread or source carried (the leave-one-out check) says so.
 - Interviews are described on their own, in counts. They never go into forum percentages (D14).
+- Rounds overlap: each adds to the posts before it. A change between rounds shows what the new material did, not a change over time (D35).
+- "Have we heard enough?" shows whether reading kept turning up new topics, not how common anything is. Its topics are your tags, not blind codes (D39).
 
 ## Quotes and privacy
 

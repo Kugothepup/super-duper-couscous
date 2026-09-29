@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 from collections import Counter
@@ -81,3 +82,29 @@ def test_salt_never_appears_in_any_output_or_log(study, no_ocr, capsys):
             assert salt_hex.encode() not in data and salt not in data, f
     manifest = (study / "results" / "run_manifest.json").read_text()
     assert '"salt_fingerprint"' in manifest
+
+
+def test_bare_names_in_post_text_are_replaced():
+    """D38, from ux-t: an author's name written without u/ or @ is replaced too, as a whole word, exact case."""
+    from crp.anonymise import name_pattern
+    pat = name_pattern({"maple_owl", "Ana", "Jo", None})
+    assert pat.sub("[user]", "As maple_owl said, Ana was right.") == "As [user] said, [user] was right."
+    assert pat.sub("[user]", "maple_owls and Anatomy and u/maple_owl-x stay") == "maple_owls and Anatomy and u/maple_owl-x stay"
+    assert pat.sub("[user]", "Jo agreed, ana too") == "Jo agreed, ana too"  # under three characters, or another case
+    assert name_pattern({None, "Jo"}) is None
+
+
+def test_anonymise_counts_replaced_names(tmp_path, no_ocr):
+    from test_paste import CAPTURED, LINK_POST
+    from crp.cli import main
+    from crp.ingest import ingest
+    from crp.paste import paste
+    from crp.verify import verify
+    main(["new", "names", "--subject", "Quillnote", "--type", "product", "--root", str(tmp_path)])
+    d = tmp_path / "names"
+    paste(d, LINK_POST.replace("feels like a joke.\n\n5", "feels like a joke, as maple_owl says.\n\n5"), captured=CAPTURED)
+    ingest(d)
+    verify(d)
+    rep = anonymise(d, tmp_path / "secrets")
+    assert rep["names_in_text_replaced"] == 1
+    assert any("as [user] says" in json.loads(line)["text"] for line in (d / "posts.jsonl").read_text().splitlines())

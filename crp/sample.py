@@ -10,8 +10,11 @@ under 8 words (opening posts are kept however short). Then two caps:
                         largest size, up to 150, at which that can hold. Below 10 threads it can't,
                         and crp sample stops; --thread-cap-pct loosens the cap, and the run
                         manifest records it.
-The frame is shuffled with the seed, and posts are taken in that order, skipping any whose
-thread is at its cap, until the sample is full.
+Posts are put in a random order and taken in that order, skipping any whose thread is at its cap,
+until the sample is full. Each post's place comes from a hash of the seed, its person code and its
+text (D35), not from shuffling the whole list, so it doesn't depend on which other posts are there:
+when a later round adds threads, the posts already picked mostly stay picked. It is still a uniform
+random order. The person cap keeps each person's first 5 posts in the same order.
 
 Detail selection (samples/detail.jsonl): triage.py's purposive selection, made by code, with the
 reasons for each pick. Within a budget of 200 forum posts: every opening post, then top-scored
@@ -20,6 +23,7 @@ across topic clusters, nearest the centre first. At most 5 comments per person; 
 opening posts are exempt. If the candidates fit in the budget, all are kept. Interviews are read
 in full, as in the skill, so every participant turn goes in with the reason "interview".
 Detail posts are never used for percentages: load_measurement() is the only way stats read a sample.
+Posts named with crp topup (D37) join the detail selection with the reason given.
 
 The seed is logged. Without --seed, a re-run reuses the last seed; a first run generates one.
 """
@@ -27,7 +31,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
 import secrets
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -41,11 +44,27 @@ from crp.io import InputError, atomic_write_text, read_jsonl, sha256_file, write
 from crp.schemas import DetailItem, MeasurementItem, Post
 from crp.signals import SIGNALS, is_echo
 
+ROUNDS = Path("rounds")
+TOPUP = Path("topup.jsonl")  # posts added to the detail selection by hand, with a reason (D37)
 MEASUREMENT = Path("samples") / "measurement.jsonl"
 DETAIL = Path("samples") / "detail.jsonl"
 SUMMARY = Path("samples") / "summary.json"
 SIGNAL_FLAGS = {"constraint_language", "implicit_request", "workaround_language",
                 "switching_language", "high_engagement", "hesitation_cluster"}
+
+
+def last_round(study_dir: Path) -> Path | None:
+    """The most recent closed round's folder, rounds/<n>/, if there is one (D35)."""
+    folder = Path(study_dir) / ROUNDS
+    done = sorted((d for d in folder.glob("*") if d.is_dir() and d.name.isdigit()), key=lambda d: int(d.name)) \
+        if folder.is_dir() else []
+    return done[-1] if done else None
+
+
+def read_topup(study_dir: Path) -> list[dict]:
+    path = Path(study_dir) / TOPUP
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] \
+        if path.exists() else []
 
 
 def ids_hash(ids: list[str]) -> str:
@@ -75,19 +94,25 @@ def candidates(posts: list[Post], min_words: int = thresholds.MIN_WORDS) -> tupl
 
 # ---- measurement sample ------------------------------------------------------
 
-def cap_people(frame: list[Post], cap: int, rng: random.Random) -> tuple[list[Post], dict[str, int]]:
-    """At most `cap` posts per person; a person with more keeps a random `cap`. Returns the capped
-    frame in its original order, and {person code: posts before capping} for each person capped."""
-    by_person: dict[str, list[str]] = defaultdict(list)
+def draw_key(seed: int, post: Post) -> tuple[str, str]:
+    """A post's place in the random order: a hash of the seed and the post itself (D35), then its id for ties."""
+    h = hashlib.sha256(f"{seed}\0{post.person_code}\0{post.text}".encode("utf-8")).hexdigest()
+    return h, post.post_id
+
+
+def cap_people(frame: list[Post], cap: int, seed: int) -> tuple[list[Post], dict[str, int]]:
+    """At most `cap` posts per person; a person with more keeps the first `cap` in the random order. Returns
+    the capped frame in its original order, and {person code: posts before capping} for each person capped."""
+    by_person: dict[str, list[Post]] = defaultdict(list)
     for p in frame:
-        by_person[p.person_code].append(p.post_id)
+        by_person[p.person_code].append(p)
     keep, capped = set(), {}
     for code in sorted(by_person):
-        ids = by_person[code]
-        if len(ids) > cap:
-            capped[code] = len(ids)
-            ids = rng.sample(ids, cap)
-        keep.update(ids)
+        posts = by_person[code]
+        if len(posts) > cap:
+            capped[code] = len(posts)
+            posts = sorted(posts, key=lambda p: draw_key(seed, p))[:cap]
+        keep.update(p.post_id for p in posts)
     return [p for p in frame if p.post_id in keep], capped
 
 
@@ -101,11 +126,11 @@ def thread_cap_size(thread_sizes: list[int], target: int, pct: int) -> tuple[int
     return 0, 0
 
 
-def draw(frame: list[Post], n: int, thread_cap: int, rng: random.Random) -> list[Post]:
-    """Shuffle the frame, then take posts in that order, skipping any whose thread is full, until n are taken."""
+def draw(frame: list[Post], n: int, thread_cap: int, seed: int) -> list[Post]:
+    """Take posts in the random order, skipping any whose thread is full, until n are taken."""
     taken: list[Post] = []
     per_thread: Counter = Counter()
-    for p in rng.sample(frame, len(frame)):
+    for p in sorted(frame, key=lambda p: draw_key(seed, p)):
         if len(taken) == n:
             break
         if per_thread[p.thread_id] < thread_cap:
@@ -116,9 +141,9 @@ def draw(frame: list[Post], n: int, thread_cap: int, rng: random.Random) -> list
     return taken
 
 
-def measurement_sample(pool: list[Post], rng: random.Random, size: int, person_cap: int,
+def measurement_sample(pool: list[Post], seed: int, size: int, person_cap: int,
                        thread_cap_pct: int) -> tuple[list[Post], dict]:
-    frame, capped = cap_people(pool, person_cap, rng)
+    frame, capped = cap_people(pool, person_cap, seed)
     sizes = Counter(p.thread_id for p in frame)
     n, cap = thread_cap_size(list(sizes.values()), size, thread_cap_pct)
     if frame and n == 0:
@@ -129,7 +154,7 @@ def measurement_sample(pool: list[Post], rng: random.Random, size: int, person_c
             f"posts must come from at least {need} threads, and the frame has {len(sizes)} ({shown} posts). "
             f"Collect more threads, or loosen the cap with --thread-cap-pct N (the run manifest records it, "
             f"and the outputs will show it).")
-    taken = draw(frame, n, cap, rng) if n else []
+    taken = draw(frame, n, cap, seed) if n else []
     got = Counter(p.thread_id for p in taken)
     before = Counter(p.thread_id for p in pool)
     info = {"target": size, "drawn": n,
@@ -231,6 +256,8 @@ def resolve_seed(study_dir: Path, seed: int | None) -> tuple[int, str]:
     if seed is not None:
         return seed, "given"
     prev = study_dir / SUMMARY
+    if not prev.exists() and last_round(study_dir) is not None:
+        prev = last_round(study_dir) / SUMMARY  # a new round keeps the seed, so earlier picks mostly stay (D35)
     if prev.exists():
         return int(json.loads(prev.read_text(encoding="utf-8"))["seed"]), "reused"
     return secrets.randbelow(2**31), "generated"
@@ -258,9 +285,16 @@ def sample(study_dir: Path, seed: int | None = None, size: int = thresholds.MEAS
     if not pool and not interview:
         raise InputError("No posts to sample: every forum post was left out and there are no interview turns.")
 
-    with manifest.stage(study_dir, "sample", inputs=[posts_path, study_dir / SIGNALS], seed=seed) as record:
-        taken, m_info = measurement_sample(pool, random.Random(seed), size, person_cap, thread_cap_pct)
+    inputs = [posts_path, study_dir / SIGNALS] + ([study_dir / TOPUP] if (study_dir / TOPUP).exists() else [])
+    with manifest.stage(study_dir, "sample", inputs=inputs, seed=seed) as record:
+        taken, m_info = measurement_sample(pool, seed, size, person_cap, thread_cap_pct)
         reasons, d_info = detail_selection(pool, flags, budget, per_person) if pool else ({}, None)
+        by_id = {p.post_id: p for p in posts}
+        topups = [t for t in read_topup(study_dir) if t["post_id"] not in reasons]
+        for t in topups:
+            if t["post_id"] not in by_id or by_id[t["post_id"]].source_type != "forum":
+                raise InputError(f"{TOPUP}: {t['post_id']} isn't a forum post in posts.jsonl any more.")
+            reasons[t["post_id"]] = [f"topup: {t['reason']}"]
         order = {p.post_id: i for i, p in enumerate(posts)}
         chosen = {p.post_id for p in taken}
         write_jsonl(study_dir / MEASUREMENT, [
@@ -279,6 +313,7 @@ def sample(study_dir: Path, seed: int | None = None, size: int = thresholds.MEAS
                    "measurement": m_info,
                    "detail": {"forum": d_info, "interview_turns": len(interview),
                               "in_measurement_too": sum(p.post_id in chosen for p in detail),
+                              "topup": len(topups),
                               "sha256": sha256_file(study_dir / DETAIL)}}
         atomic_write_text(study_dir / SUMMARY, json.dumps(summary, indent=2, ensure_ascii=False) + "\n")
         record["seed_source"] = seed_source

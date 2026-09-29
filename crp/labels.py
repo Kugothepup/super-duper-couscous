@@ -6,7 +6,8 @@ Fails loudly. Warnings (not failures), ported from validate.py: overall and aspe
 opposite ways, and labels out of the order given.
 
 lock: after a clean validate, records the sha256 of every batch and labels file and the coder
-model in labels.lock. From then on the labels can't change, and crp unseal may run.
+model in labels.lock. From then on the labels can't change, and crp unseal may run. Labels reused
+from the last round (D35) must come from the same coder model, and the lock counts them.
 
 unseal: refuses unless the labels are locked and unchanged. Copies sealed/prior.md to
 results/prior.md by code and logs the time. Nothing else in the pipeline opens sealed/.
@@ -122,6 +123,10 @@ def validate_batch(study_dir: Path, entry: dict, codebook: Codebook) -> dict:
     if not path.exists():
         out["errors"].append(f"not coded yet: no {labels_file(entry['batch'])}")
         return out
+    if "reused" in entry and sha256_file(path) != entry["reused"]["labels_sha256"]:
+        out["errors"].append(f"{labels_file(entry['batch'])} has been edited since crp batch copied it from "
+                             f"{entry['reused']['from']}. Run crp batch again.")
+        return out
     labels, out["errors"] = read_labels(path)
     known, seen = set(ids), []
     for lab in labels:
@@ -193,6 +198,14 @@ def lock(study_dir: Path, coder_model: str) -> dict:
         raise InputError(f"The labels have {n} problem(s). Run crp labels validate, fix them, then lock.")
     codebook, cb_lock = frozen(study_dir)
     index = read_index(study_dir)
+    reused = [e for e in index["batches"] if "reused" in e]
+    others = sorted({e["reused"]["coder_model"] for e in reused} - {coder_model})
+    if others:
+        n = sum(len(e["items"]) for e in reused)
+        raise InputError(f"{n} label(s) were reused from {reused[0]['reused']['from']}, where {others[0]} coded them, "
+                         f"but this round's coder is {coder_model}. Labels from two models can't be mixed. If "
+                         f"{others[0]} coded this round too, lock with --coder-model {others[0]}; otherwise run "
+                         "crp batch --no-reuse and have everything coded again.")
     files = _files(study_dir, index)
     existing = study_dir / LABELS_LOCK
     if existing.exists():
@@ -204,7 +217,11 @@ def lock(study_dir: Path, coder_model: str) -> dict:
                         codebook_version=codebook.version, coder_model=coder_model) as record:
         data = {"locked_at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
                 "codebook_version": codebook.version, "codebook_sha256": cb_lock["sha256"],
-                "coder_model": coder_model, "items": sum(len(e["items"]) for e in index["batches"]), "files": files}
+                "coder_model": coder_model, "items": sum(len(e["items"]) for e in index["batches"]),
+                "reused_items": sum(len(e["items"]) for e in reused), "files": files}
+        if reused:
+            data["reused_from"] = reused[0]["reused"]["from"]
+        record["reused_items"] = data["reused_items"]
         atomic_write_text(existing, json.dumps(data, indent=2) + "\n")
         record["outputs"] = [str(LABELS_LOCK)]
     return data

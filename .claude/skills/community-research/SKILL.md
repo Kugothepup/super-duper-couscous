@@ -28,6 +28,8 @@ Never compute, estimate or round a number in conversation and put it in an outpu
 
 Every command is `python -m crp <command> studies/<id> [options]`. In this project the package lives in `.venv`, so run `.venv/bin/python -m crp …` (system Python lacks the dependencies). Each command checks its inputs, records itself in `results/run_manifest.json`, and prints what to do next. When a command stops with an error, fix the input it names. Don't find a way round it.
 
+`crp status studies/<id>` shows where a study is up to: each stage done, to do, stale, blocked, or waiting on Steeve or on you, and what comes next. Start there when picking a study back up.
+
 ## Stages
 
 | # | Stage | You do (judgement) | crp does (computation) | Stop |
@@ -57,13 +59,15 @@ Ask Steeve once, briefly, for anything you can't infer:
 crp new <id> --subject "…" --type news --question "…" --stance-target "…" --event-date YYYY-MM-DD --population "…" --owner Steeve
 ```
 
+If the study has interview transcripts, ask Steeve before you read any of them, or code or batch them. Anything read in this session goes through Anthropic's cloud (D38). Forum posts are public already.
+
 Then tell Steeve that if he believes something going in, he should write it himself in `studies/<id>/sealed/prior.md` before any posts are read. Don't ask what it says, and never open it. Going in blind is fine too. Every search goes in `collection_log.csv`, including searches that kept nothing (`reference/capture.md`). If every search looks for evidence of his view, suggest neutral ones.
 
 ### 1. Collect and capture
 
 Steeve puts his sources under `studies/<id>/raw/`: pasted pages as `.txt`, screenshots, Reddit exports in `raw/reddit/`, and transcripts in `raw/interviews/`. Before Reddit data is collected, remind him once to check Reddit's terms for his use.
 
-For each paste or screenshot, write `raw/capture/<name>.json` following `reference/capture.md`. Copy text exactly; the checker rejects tidied wording. Exports and transcripts need no capture file. Then run:
+For a copied Reddit thread page, `crp paste studies/<id> page.txt --search-term "…"` saves it and writes its capture file. It reports anything it skipped, and how many replies Reddit had collapsed; tell Steeve, so he can expand them and paste again with `--replace`. For other pastes and screenshots, write `raw/capture/<name>.json` yourself following `reference/capture.md`. Copy text exactly; the checker rejects tidied wording. Exports and transcripts need no capture file. Then run:
 
 ```
 crp ingest studies/<id>       # check the interviewer and participant roles it prints
@@ -80,7 +84,7 @@ Look at every OCR-flagged post against its image. Without Tesseract, screenshots
 - anything dropped: duplicates, bots, promotional posts, collapsed replies;
 - the collection log.
 
-Ask whether anything is missing. Adding threads now is cheap. Once coding has started, added threads need a new round (`crp round`, coming in Phase 7b).
+Ask whether anything is missing. Adding threads now is cheap. Once coding has started, added threads need a new round (see "Adding threads later").
 
 ### 2. Sample
 
@@ -172,7 +176,9 @@ Read `reference/synthesis.md` and `reference/hypotheses.md`. Work from the coded
 4. Write `hypotheses.json`. `stated` hypotheses come only from `results/prior.md`, after unseal. `formed` ones come from the findings, including at least one rival to each stated one.
 5. Write `summary.md`: a short paragraph in words. Numbers appear only as placeholders such as `{{ headline.negative.k }}`, never as typed digits.
 
-Check each top driver has coded explanations (`crp view observations`). If one is thin, say so in the summary. A logged top-up of extra posts comes in Phase 7b (D37); don't code extra posts any other way. Run `crp validate studies/<id>` until it shows 0 errors, and act on its warnings.
+Check each top driver has coded explanations (`crp view observations`). If one is thin, say so in the summary, and offer Steeve a top-up: find posts that explain it (`crp view kwic`) and add them in a new round with `crp topup` (see "Adding threads later", D37). Never code extra posts any other way. Run `crp validate studies/<id>` until it shows 0 errors, and act on its warnings.
+
+`crp analyse` also draws "Have we heard enough?" from your observation tags: topics found against posts read, averaged over many random reading orders (D39). Keep tags consistent, since two names for one topic count as two. Read what it prints; don't restate its numbers.
 
 ### 8. Build
 
@@ -205,7 +211,14 @@ Paraphrase posts rather than quoting them. `reference/wording.md` has the wordin
 ## Adding threads later
 
 - **Before `crp batch`:** add the new captures and re-run from `crp ingest`. `crp sample` keeps the seed.
-- **After coding has started:** until Phase 7b's `crp round`, make a new study that holds all the threads, which means coding again. Don't append posts to a coded study.
+- **After the labels are locked:** start a new round (D35):
+  1. `crp round studies/<id> --reason "added three threads from r/…"` keeps the current round in `rounds/<n>/` for comparison.
+  2. Add the threads (`crp paste`, captures or exports), then run `ingest`, `verify`, `anonymise`, `signals`, and `sample` with the settings `crp round` printed. Thread and post ids stay the same, and the seed carries over, so earlier picks mostly stay picked.
+  3. `crp batch` reuses the last round's labels for every item the coder would see unchanged. Only the batches it lists go to the blind coder. Lock with the same coder model; a different model means `crp batch --no-reuse`.
+  4. Update the synthesis for the new posts, run a new agreement check, analyse and build. The outputs show each round, and how much the headline moved.
+- **To explain a thin driver (D37):** start a round with `--reason "top-up: …"`, then `crp topup studies/<id> T03-p12 … --reason "…"`, then `crp sample` and `crp batch`. Only the named posts are coded, and no percentage changes.
+- **Between rounds, a change shows what the new material did, not a change over time.** The rounds overlap. Say so.
+- **`crp reset --yes`** archives every generated file and unfreezes the codebook, so the study starts again from its sources. Only run it when Steeve asks.
 
 ## Reference
 

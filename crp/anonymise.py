@@ -26,6 +26,7 @@ from crp.verify import REPORT as VERIFY_REPORT
 POSTS = Path("posts.jsonl")
 MENTION = re.compile(r"(?<![\w@./])@[A-Za-z0-9_](?:[A-Za-z0-9_.-]*[A-Za-z0-9_])?")
 REDDIT_MENTION = re.compile(r"(?<![\w/])/?u/[A-Za-z0-9_-]+")
+MIN_NAME = 3
 
 
 def default_secrets_dir(study_dir: Path) -> Path:
@@ -61,6 +62,15 @@ def strip_mentions(text: str) -> str:
     return REDDIT_MENTION.sub("u/[user]", MENTION.sub("@[user]", text))
 
 
+def name_pattern(names: set[str | None]) -> re.Pattern | None:
+    """Any author's name written in a post without u/ or @ (D38, from ux-t): exact case, as a whole word, and
+    at least MIN_NAME characters so a short name doesn't catch ordinary words."""
+    usable = sorted((n for n in names if n and len(n) >= MIN_NAME), key=len, reverse=True)
+    if not usable:
+        return None
+    return re.compile(r"(?<![\w/@-])(?:" + "|".join(map(re.escape, usable)) + r")(?![\w-])")
+
+
 def check_verified(study_dir: Path) -> None:
     ingested = study_dir / INGESTED
     report_path = study_dir / VERIFY_REPORT
@@ -87,17 +97,25 @@ def anonymise(study_dir: Path, secrets_dir: Path | None = None) -> dict:
     with manifest.stage(study_dir, "anonymise", inputs=[ingested, study_dir / VERIFY_REPORT]) as record:
         code_of: dict[str, str] = {}
         posts = []
+        names = name_pattern({r.author for r in rows})
+        redacted = 0
         for r in rows:
             key = r.author if r.author is not None else f"\0unnamed\0{r.post_id}"
             code = person_code(salt, key)
             if code_of.setdefault(code, key) != key:
                 raise InputError("Two different people got the same person code, which is very rare. The salt "
                                  "needs replacing (every person code will change) before this study can continue.")
-            data = r.model_dump(exclude={"author"}) | {"person_code": code, "text": strip_mentions(r.text)}
+            text = strip_mentions(r.text)
+            if names:
+                text, n = names.subn("[user]", text)
+                redacted += n
+            data = r.model_dump(exclude={"author"}) | {"person_code": code, "text": text}
             posts.append(validate(Post, data, r.post_id))
         write_jsonl(study_dir / POSTS, posts)
         people = {src: len({p.person_code for p in posts if p.role == "participant" and p.source_type == src})
                   for src in ("forum", "interview")}
         record["salt_fingerprint"] = fingerprint(salt)
+        record["names_in_text_replaced"] = redacted
         record["outputs"] = [str(POSTS)]
-    return {"posts": len(posts), "forum_people": people["forum"], "interview_participants": people["interview"]}
+    return {"posts": len(posts), "forum_people": people["forum"], "interview_participants": people["interview"],
+            "names_in_text_replaced": redacted}

@@ -238,6 +238,22 @@
   {% set labels = {"switching_language": "Talk of switching or leaving", "workaround_language": "Workarounds", "constraint_language": "Being blocked (\"had to\", \"couldn't\")", "implicit_request": "Implicit requests (\"I wish\", \"is there a way\")"} if lens.jtbd else {"implicit_request": "Wishes and requests (\"I wish\", \"why can't\")", "constraint_language": "Constraint (\"had to\", \"couldn't\")", "switching_language": "Leaving or switching"} %}
   {% for k, label in labels.items() %}{% set sr = G.signal_rates.get(k) %}<div class="drow" style="grid-template-columns:minmax(0,220px) minmax(0,1fr) auto"><span>{{ label }}</span><div class="track"><div class="fill prob" style="width:{{ (sr.pct or 0) if sr else 0 }}%"></div></div><span class="num">{{ share(sr) }}</span></div>{% endfor %}</div>
 
+{%- elif id == "heard" %}{% set he = r.heard_enough %}{% set c = curve %}
+  <p class="lede">Reading the {{ he.posts }} coded forum posts in {{ he.orders }} random orders turned up {{ he.topics }} topics. The line follows the average order, and the shaded band holds the middle {{ heard_band }}% of orders. Where the line flattens, more posts like these were adding little that was new.</p>
+  <div class="scroll"><svg class="heard" viewBox="0 0 {{ c.width }} {{ c.height }}" role="img" aria-label="Topics found against posts read, averaged over random reading orders">
+    <path d="{{ c.band }}" fill="var(--ink)" fill-opacity="0.12" stroke="none"/>
+    <path d="{{ c.line }}" fill="none" stroke="var(--ink)" stroke-width="2"/>
+    <line x1="{{ c.left }}" y1="{{ c.bottom }}" x2="{{ c.right }}" y2="{{ c.bottom }}" stroke="var(--muted)"/>
+    <line x1="{{ c.left }}" y1="{{ c.top }}" x2="{{ c.left }}" y2="{{ c.bottom }}" stroke="var(--muted)"/>
+    <text x="{{ c.left - 6 }}" y="{{ c.top + 4 }}" font-size="11" fill="var(--muted)" text-anchor="end">{{ he.topics }}</text>
+    <text x="{{ c.left - 6 }}" y="{{ c.bottom + 4 }}" font-size="11" fill="var(--muted)" text-anchor="end">0</text>
+    <text x="{{ c.left + 6 }}" y="{{ c.top + 4 }}" font-size="11" fill="var(--muted)">topics found</text>
+    <text x="{{ c.left }}" y="{{ c.bottom + 16 }}" font-size="11" fill="var(--muted)" text-anchor="middle">1</text>
+    <text x="{{ c.right }}" y="{{ c.bottom + 16 }}" font-size="11" fill="var(--muted)" text-anchor="middle">{{ he.posts }}</text>
+    <text x="{{ (c.left + c.right) / 2 }}" y="{{ c.bottom + 30 }}" font-size="11" fill="var(--muted)" text-anchor="middle">posts read</text>
+  </svg></div>
+  <p>Over the last {{ he.last_posts }} {{ "post" if he.last_posts == 1 else "posts" }}, the average order found {{ he.last_new }} new {{ "topic" if he.last_new == 1 else "topics" }}.</p>
+  <p class="lede">Topics are the AI's tags on its observations, less pattern tags such as workaround or trust. So this shows whether reading kept turning up new things, not how common anything is.</p>
 {%- elif id == "trust" %}
   <div class="keyline" style="margin-top:10px"><span><span class="sw"></span>solid: several voices</span><span><span class="sw thin" style="background:none;background-image:repeating-linear-gradient(135deg,var(--ink) 0 2px,transparent 2px 6px)"></span>hatched: one voice, low confidence or an early signal</span></div>
   <div class="trust"><dl>
@@ -253,6 +269,7 @@
     {% if h %}<dt>Ranges</dt><dd>From {{ r.bootstrap_draws }} re-draws, resampling people and resampling threads; the wider range is shown. They describe this collection, not a wider population.</dd>{% endif %}
     {% set sens = r.sensitivity %}{% if sens %}<dt>How much one source matters</dt><dd>{% if sens.min_pct is not none %}Leaving out one source, search term or large thread at a time: {{ sens.min_pct }}–{{ sens.max_pct }}% negative over {{ sens.removals_with_pct }} such checks{% if sens.most_moved %}; leaving out {{ sens.most_moved.kind|label }} {{ sens.most_moved.removed }} moved it most ({{ "%+g"|format(sens.most_moved.change_pts) }} points){% endif %}. {% else %}Too few people left after each removal for a percentage. {% endif %}{% if sens.without_caps and sens.without_caps.pct is not none %}Without the caps, an estimated {{ sens.without_caps.pct }}% of comments were negative.{% endif %}</dd>{% endif %}
     {% if syn %}<dt>Evidence behind coded posts</dt><dd>{% for k, v in syn.evidence_mix.items() %}{{ k|label }} {{ v }}{% if not loop.last %}, {% endif %}{% endfor %}</dd>{% endif %}
+    {% if r.rounds %}{% set ro = r.rounds %}<dt>Rounds</dt><dd>This is round {{ ro.current }}: {{ ro.reason }}. Each round adds to the posts before it, so a change between rounds shows what the new material did, not a change over time.{% for e in ro.earlier %}<br>Round {{ e.round }} ({{ e.reason }}): {% if e.n_items %}{{ e.n_items }} sampled comments from {{ e.n_people }} people in {{ e.n_threads }} threads{% if e.negative %}, {% if e.negative.status == "counts-only" %}{{ e.negative.k }} of {{ e.negative.n }} negative{% else %}{{ e.negative.pct }}% negative{% endif %}{% endif %}{% if e.top_driver %}; top driver {{ e.top_driver }}{% endif %}{% else %}not analysed{% endif %}.{% endfor %}{% if ro.change_pts is not none %}<br>Since round {{ ro.earlier[-1].round }}, the negative share has moved {{ "%+g"|format(ro.change_pts) }} points.{% endif %}</dd>{% endif %}
     <dt>Direction</dt><dd>{{ "Several periods compared" if r.direction and r.direction.status == "ok" else "Snapshot: no trend can be claimed" }}</dd>
     {% if r.themes %}<dt>Topic clusters</dt><dd>separation score {{ r.themes.silhouette }} ({{ "loose" if r.themes.silhouette < 0.1 else "moderate" if r.themes.silhouette < 0.3 else "clear" }})</dd>{% endif %}
     <dt>Quotes</dt><dd>{{ "Withheld. Evidence is paraphrased, with post ids that trace to source files kept privately." if shareable else "Included, for internal use only. Share the default build instead." }}</dd>

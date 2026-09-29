@@ -759,6 +759,43 @@ class TagPair(Strict):
     n: int
 
 
+class RoundRow(Strict):
+    """An earlier round, from its own results.json (D35)."""
+    round: int
+    reason: NonEmpty
+    n_items: int | None = None
+    n_people: int | None = None
+    n_threads: int | None = None
+    negative: Share | None = None
+    top_driver: str | None = None
+    reused_items: int = 0
+
+
+class Rounds(Strict):
+    current: int = Field(ge=2)
+    reason: NonEmpty
+    earlier: list[RoundRow] = Field(min_length=1)
+    change_pts: float | None = None  # this round's negative share minus the last round's, in points
+
+
+class HeardEnough(Strict):
+    """Topics found as coded forum detail posts are read, averaged over random reading orders (D39)."""
+    posts: int = Field(ge=2)
+    topics: int = Field(ge=1)
+    orders: int = Field(ge=1)
+    mean: list[float]
+    low: list[float]
+    high: list[float]
+    last_posts: int = Field(ge=1)
+    last_new: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _one_point_per_post(self) -> HeardEnough:
+        if not len(self.mean) == len(self.low) == len(self.high) == self.posts:
+            raise ValueError("the curve needs one point per post read")
+        return self
+
+
 class Results(Strict):
     """studies/<id>/results/results.json: every number the outputs show, made by crp analyse."""
     study_id: Slug
@@ -788,3 +825,5 @@ class Results(Strict):
     themes: ThemesSummary | None = None
     synthesis: SynthesisResult | None = None
     hypotheses: list[HypothesisResult] = []
+    rounds: Rounds | None = None
+    heard_enough: HeardEnough | None = None

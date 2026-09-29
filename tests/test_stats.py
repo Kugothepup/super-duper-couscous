@@ -228,7 +228,7 @@ def test_same_seed_gives_identical_results(analysed_study):
 def test_analyse_uses_the_measurement_sample_only(analysed_study):
     out = analyse(analysed_study, seed=3, draws=300)["results"]
     measured = [json.loads(line) for line in (analysed_study / "samples" / "measurement.jsonl").read_text().splitlines()]
-    assert out.headline.negative.n == len(measured) == out.sample.n_items == 28
+    assert out.headline.negative.n == len(measured) == out.sample.n_items == 30
     assert out.sample.status == "early-signal" and out.sample.thread_cap_loosened
     assert out.interviews.transcripts == 1 and out.interviews.coded_turns == 4  # counted apart (D14)
     assert out.keyness.shown is False and "early-signal" in out.keyness.reason
@@ -256,6 +256,6 @@ def test_cli_analyse(analysed_study, capsys):
     from crp.cli import main
     assert main(["analyse", str(analysed_study), "--draws", "200"]) == 0
     out = capsys.readouterr().out
-    assert "Sample: 28 comments from 21 people in 4 threads (early-signal)" in out
+    assert "Sample: 30 comments from 22 people in 4 threads (early-signal)" in out
     assert "thread cap was loosened to 30%" in out and "every section is unverified" in out
     assert "Interviews (own section, counts only): 1 transcript(s)" in out

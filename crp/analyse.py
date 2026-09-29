@@ -4,6 +4,12 @@ Reads the measurement sample through load_measurement (so detail posts can't ent
 the frozen codebook and study.yaml, and writes results.json, validated by the Results schema. The same
 seed gives a byte-identical file: it holds input hashes, not a timestamp (the run manifest has the time).
 Interviews are counted in their own section and never enter a forum figure (D14).
+
+Two more sections (D35, D39). After crp round, results.json lists each earlier round's sample and headline,
+from rounds/<n>/results/results.json, and the change in the negative share since the last round. And
+"have we heard enough?": the topics found (observation tags, less the pattern tags) as coded forum detail
+posts are read, averaged over as many random reading orders as there are re-draws, with the middle 95%
+of orders as the range, so the curve doesn't depend on the order posts happened to be read in.
 """
 from __future__ import annotations
 
@@ -11,7 +17,9 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from crp import hypotheses, language, manifest, stats, synthesis, thresholds
+import numpy as np
+
+from crp import hypotheses, language, manifest, rounds, stats, synthesis, thresholds
 from crp.anonymise import POSTS
 from crp.batch import INDEX, labels_file, read_index
 from crp.codebook import CODEBOOK, frozen
@@ -169,6 +177,50 @@ def themes_summary(study_dir: Path, checked: dict | None) -> dict | None:
             "clusters": clusters, "gaps": gaps}
 
 
+PATTERN_TAGS = {"workaround", "request", "mental-model", "contradiction", "trust", "question"}  # D39: not topics
+HEARD_BAND = 95  # % of reading orders the heard-enough range holds (D39)
+
+
+def heard_enough(posts: list[Post], tags: dict[str, set[str]], orders: int, seed: int) -> dict | None:
+    """Topics found against coded forum detail posts read, over `orders` random reading orders (D39)."""
+    topics = sorted({t for ts in tags.values() for t in ts})
+    n = len(posts)
+    if n < 2 or not topics:
+        return None
+    rng = np.random.default_rng(seed)
+    place = rng.random((orders, n)).argsort(axis=1).argsort(axis=1)  # each post's place in each order
+    first = np.stack([place[:, [i for i, p in enumerate(posts) if t in tags.get(p.post_id, set())]].min(axis=1)
+                      for t in topics], axis=1)  # when each topic first turns up, per order
+    found = np.stack([np.bincount(row, minlength=n).cumsum() for row in first])  # topics found after k+1 posts
+    mean = found.mean(axis=0)
+    last = max(1, n // 10)
+    return {"posts": n, "topics": len(topics), "orders": orders,
+            "mean": [round(float(x), 2) for x in mean],
+            "low": [float(x) for x in np.percentile(found, (100 - HEARD_BAND) / 2, axis=0)],
+            "high": [float(x) for x in np.percentile(found, 100 - (100 - HEARD_BAND) / 2, axis=0)],
+            "last_posts": last, "last_new": round(float(mean[-1] - mean[-1 - last]), 1)}
+
+
+def rounds_summary(study_dir: Path, headline: dict | None) -> dict | None:
+    """Each earlier round's sample and headline, and the change in the negative share since the last (D35)."""
+    earlier = rounds.closed(study_dir)
+    if not earlier:
+        return None
+    rows = []
+    for r in earlier:
+        path = study_dir / "rounds" / str(r["round"]) / RESULTS
+        res = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        s = res.get("sample", {})
+        rows.append({"round": r["round"], "reason": r["reason"], "n_items": s.get("n_items"),
+                     "n_people": s.get("n_people"), "n_threads": s.get("n_threads"),
+                     "negative": (res.get("headline") or {}).get("negative"),
+                     "top_driver": (res.get("drivers") or [None])[0], "reused_items": r.get("reused_items", 0)})
+    now, before = (headline or {}).get("negative", {}).get("pct"), (rows[-1]["negative"] or {}).get("pct")
+    cur = rounds.current(study_dir)
+    return {"current": cur["round"], "reason": cur["reason"], "earlier": rows,
+            "change_pts": round(now - before, 1) if now is not None and before is not None else None}
+
+
 def min_words(study_dir: Path, measurement: dict) -> int:
     """The sample's minimum words, from its summary, or from the run manifest for samples drawn before
     the summary recorded it."""
@@ -256,6 +308,12 @@ def analyse(study_dir: Path, seed: int | None = None, draws: int = BOOT_DRAWS) -
                     raise InputError("Hypothesis signals don't fit the sample:\n" + "\n".join(scored["errors"]))
                 data["hypotheses"] = scored["hypotheses"]
                 warnings += scored["warnings"]
+        data["rounds"] = rounds_summary(study_dir, data.get("headline"))
+        if checked:
+            read = [post for _, post in load_detail(study_dir)
+                    if post.source_type == "forum" and ("detail", post.post_id) in coded]
+            tags = {pid: set(n.obs.tags) - PATTERN_TAGS for pid, n in checked["nuggets"].items()}
+            data["heard_enough"] = heard_enough(read, tags, draws, seed)
         results = validate(Results, data, "results.json")
         atomic_write_text(study_dir / RESULTS, json.dumps(results.model_dump(mode="json", exclude_none=True),
                                                           indent=2, ensure_ascii=False) + "\n")

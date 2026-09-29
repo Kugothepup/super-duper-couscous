@@ -1,6 +1,7 @@
 """Codebook freeze, blinded batches, label validation and locking, and unseal."""
 import json
 import os
+import re
 import time
 
 import pytest
@@ -271,7 +272,7 @@ def test_cli_runs_every_coding_stage(batched, capsys):
     from crp.cli import main
     d = str(batched)
     assert main(["codebook", "freeze", d]) == 0 and "already frozen" in capsys.readouterr().out
-    assert main(["batch", d]) == 0 and "batch_003  detail" in capsys.readouterr().out
+    assert main(["batch", d]) == 0 and re.search(r"batch_003 +detail", capsys.readouterr().out)
     assert main(["labels", "validate", d]) == 1 and "not coded yet" in capsys.readouterr().out
     write_labels(batched)
     assert main(["labels", "validate", d, "--batch", "batch_002"]) == 0
@@ -280,7 +281,7 @@ def test_cli_runs_every_coding_stage(batched, capsys):
     write_prior(batched)
     assert main(["unseal", d]) == 0 and "after the first crp ingest" in capsys.readouterr().out
     assert main(["agreement", "export", d, "--n", "20", "--measurement-n", "12"]) == 0
-    assert "20 of 100 coded items (12 measurement, then 8 detail)" in capsys.readouterr().out
+    assert "20 of 102 coded items (12 measurement, then 8 detail)" in capsys.readouterr().out
     assert main(["agreement", "score", d]) == 2 and "No human/human_labels.csv" in capsys.readouterr().err
 
 

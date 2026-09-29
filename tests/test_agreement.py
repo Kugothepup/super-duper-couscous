@@ -89,7 +89,7 @@ def test_sheet_holds_no_ai_labels(batched):
         rows = [json.loads(line) | {"rationale": "ZEBRA rationale"} for line in p.read_text().splitlines()]
         p.write_text("".join(json.dumps(r) + "\n" for r in rows))
     out = export(batched, n=50, measurement_n=20)
-    assert out == {"items": 50, "of": 100, "seed": index["seed"], "measurement": 20, "detail": 30}
+    assert out == {"items": 50, "of": 102, "seed": index["seed"], "measurement": 20, "detail": 30}
     text = (batched / "human" / "agreement_sheet.csv").read_text()
     assert "ZEBRA" not in text
     sample_of = {it["item_id"]: b for b in index["batches"] for it in b["items"]}
@@ -117,9 +117,9 @@ def test_quotas_split_60_40_and_top_each_other_up():
 
 def test_default_sheet_puts_measurement_items_first(batched):
     out = export(batched)
-    assert (out["measurement"], out["detail"]) == (28, 72)
+    assert (out["measurement"], out["detail"]) == (30, 70)
     ids = [r["item_id"] for r in sheet_rows(batched)]
-    assert all(i.startswith("m") for i in ids[:28]) and all(i.startswith("d") for i in ids[28:])
+    assert all(i.startswith("m") for i in ids[:30]) and all(i.startswith("d") for i in ids[30:])
 
 
 def test_export_is_seeded_and_keeps_a_coded_sheet(batched):

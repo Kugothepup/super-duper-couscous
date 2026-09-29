@@ -7,6 +7,9 @@ import sys
 from pathlib import Path
 
 from crp.anonymise import anonymise
+from crp.paste import paste
+from crp.rounds import reset, start_round, topup
+from crp.status import status
 from crp.ingest import ingest
 from crp import agreement, labels, thresholds
 from crp.analyse import analyse
@@ -45,6 +48,37 @@ def study_dir(arg: str) -> Path:
     if not (d / "study.yaml").exists():
         raise InputError(f"{d} isn't a study folder (no study.yaml). Set one up with crp new.")
     return d
+
+
+def cmd_paste(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8-sig")
+    try:
+        captured = dt.date.fromisoformat(args.captured) if args.captured else None
+    except ValueError:
+        raise InputError(f"--captured must be YYYY-MM-DD (got {args.captured}).")
+    rep = paste(d, text, name=args.name, captured=captured, search_term=args.search_term, replace=args.replace)
+    name = rep["name"]
+    print(f"Pasted \"{rep['title']}\" ({rep['site']}) into raw/{name}.txt and raw/capture/{name}.json: "
+          f"{rep['posts']} posts from {rep['names']} names.")
+    if rep["replaced"]:
+        print(f"The earlier paste is kept as {rep['replaced']}.")
+    if rep["link_post"]:
+        print("It links to another page, so its opening post is the thread title.")
+    skipped = ", ".join(f"{k.replace('_', '-')} {v}" for k, v in rep["skipped"].items() if v)
+    if skipped:
+        print(f"Skipped: {skipped}")
+    if rep["quotes_removed"]:
+        n = rep["quotes_removed"]
+        print(f"Left out quoted text at the top of {n} {'reply' if n == 1 else 'replies'}, and linked "
+              f"{'it' if n == 1 else 'each'} to the post it quotes.")
+    c = rep["collapsed"]
+    if c["more_replies"] or c["continue_threads"]:
+        print(f"! The paste is missing comments Reddit had collapsed: {c['more_replies']} more replies, and "
+              f"{c['continue_threads']} 'Continue this thread' link(s). Expand them and paste again with --replace "
+              "to include them.")
+    print("Next: crp ingest, then crp verify checks every post against the paste.")
+    return 0
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
@@ -107,6 +141,8 @@ def cmd_anonymise(args: argparse.Namespace) -> int:
     rep = anonymise(d, Path(args.secrets_dir) if args.secrets_dir else None)
     print(f"Wrote {d}/posts.jsonl: {rep['posts']} posts from {rep['forum_people']} people in forum threads and "
           f"{rep['interview_participants']} interview participant(s), names replaced by person codes.")
+    if rep["names_in_text_replaced"]:
+        print(f"Replaced {rep['names_in_text_replaced']} mention(s) of an author's name inside post text with [user].")
     print("Next: crp signals")
     return 0
 
@@ -177,6 +213,58 @@ def cmd_sample(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_round(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = start_round(d, args.reason)
+    print(f"Closed round {rep['closed']}: its samples, batches, labels and agreement codes moved to {rep['folder']}/, "
+          "with a copy of its results, posts and synthesis. Round " + str(rep["next"]) + " has started.")
+    s = rep["settings"]
+    flags = [f"{DEFAULTS[k][0]} {v}" for k, v in s.items() if k in DEFAULTS and v != DEFAULTS[k][1]]
+    print("Next: add the new threads to raw/ (crp paste, captures or exports), then run crp ingest, verify, anonymise "
+          f"and signals, then crp sample{' ' + ' '.join(flags) if flags else ''} (the seed carries over), "
+          "then crp batch: only posts the coder hasn't seen go to the blind coder.")
+    return 0
+
+
+def cmd_topup(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = topup(d, args.post_ids, args.reason)
+    print(f"Added {len(rep['added'])} post(s) to the detail selection for \"{args.reason}\": {', '.join(rep['added'])}")
+    if rep["already"]:
+        print(f"Already top-ups: {', '.join(rep['already'])}")
+    print("Next: crp sample (same seed; top-ups join the detail selection, and no percentage changes), then crp batch.")
+    return 0
+
+
+def cmd_reset(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    if not args.yes:
+        raise InputError("crp reset moves every generated file into archive/ and unfreezes the codebook, so the "
+                         "study starts again from its sources. Only do this when Steeve asks; add --yes to go ahead.")
+    rep = reset(d)
+    print(f"Moved {len(rep['moved'])} generated file(s) and folder(s) to {rep['archive']}/. Kept raw/, the sealed "
+          "prior, study.yaml, the collection log and codebook.yaml (now unfrozen).")
+    print("Next: crp ingest")
+    return 0
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    d = study_dir(args.study)
+    rep = status(d)
+    r = rep["round"]
+    extra = f"; {rep['posts']} posts" if rep["posts"] is not None else ""
+    extra += f"; {rep['topups']} top-up post(s)" if rep["topups"] else ""
+    print(f"{d.name}: round {r['round']} ({r['reason']}){extra}")
+    for s in rep["stages"]:
+        why = f"  {s.why}" if s.why else ""
+        print(f"  {s.state:<18} {s.name:<15}{why}".rstrip())
+    if rep["next"]:
+        print(f"Next ({rep['next']['stage']}): {rep['next']['do']}")
+    else:
+        print("Everything is done. To add threads: crp round, then the stages again from crp ingest.")
+    return 0
+
+
 def cmd_codebook_freeze(args: argparse.Namespace) -> int:
     d = study_dir(args.study)
     lock = freeze(d, new_version=args.new_version)
@@ -194,13 +282,19 @@ def cmd_codebook_freeze(args: argparse.Namespace) -> int:
 
 def cmd_batch(args: argparse.Namespace) -> int:
     d = study_dir(args.study)
-    rep = make_batches(d, size=args.size, seed=args.seed)
+    rep = make_batches(d, size=args.size, seed=args.seed, reuse=not args.no_reuse)
     state = "unchanged" if rep["unchanged"] else "written"
     print(f"Batches {state} (items shuffled with seed {rep['seed']}):")
     for b in rep["batches"]:
-        print(f"  {b['batch']}  {b['sample']:<11}  {b['items']:>3} items")
-    print("Next: for each batch, delegate to the blind-coder agent with only two paths:")
-    print(f"  {d}/batches/batch_NNN.jsonl  and  {d}/labels/batch_NNN.labels.jsonl")
+        note = f"  labels reused from {rep['reused_from']}: not for the coder" if b["reused"] else ""
+        print(f"  {b['batch']:<18} {b['sample']:<11}  {b['items']:>3} items{note}")
+    to_code = [b["batch"] for b in rep["batches"] if not b["reused"]]
+    if to_code:
+        print("Next: for each of these batches, delegate to the blind-coder agent with only two paths:")
+        for name in to_code:
+            print(f"  {d}/batches/{name}.jsonl  and  {d}/labels/{name}.labels.jsonl")
+    else:
+        print("Nothing new to code: every item's labels were reused.")
     print("Then: crp labels validate")
     return 0
 
@@ -226,7 +320,8 @@ def cmd_labels_lock(args: argparse.Namespace) -> int:
     if data.get("unchanged"):
         print(f"The labels were already locked at {data['locked_at']}, unchanged.")
     else:
-        print(f"Locked {data['items']} labelled items (codebook version {data['codebook_version']}, "
+        reused = f", {data['reused_items']} of them reused from {data['reused_from']}" if data.get("reused_items") else ""
+        print(f"Locked {data['items']} labelled items{reused} (codebook version {data['codebook_version']}, "
               f"coder {data['coder_model']}) in labels.lock.")
     print("Next: crp unseal, then crp agreement export")
     return 0
@@ -325,6 +420,17 @@ def cmd_analyse(args: argparse.Namespace) -> int:
     if syn:
         print(f"Synthesis: {syn['observations']} observations, {len(syn['insights'])} insights, {len(syn['pains'])} "
               f"pain groups, {len(syn['jobs'])} jobs, {len(syn['opportunities'])} opportunities")
+    ro = r.get("rounds")
+    if ro:
+        prev = ro["earlier"][-1]
+        moved = f"; the negative share moved {ro['change_pts']:+} points since round {prev['round']}" \
+            if ro.get("change_pts") is not None else ""
+        print(f"Round {ro['current']} ({ro['reason']}){moved}. Rounds overlap, so that's what the new material did, "
+              "not a change over time.")
+    he = r.get("heard_enough")
+    if he:
+        print(f"Heard enough: {he['topics']} topics over {he['posts']} coded posts; over the last {he['last_posts']} "
+              f"posts the average reading order found {he['last_new']} new ({he['orders']} random orders)")
     for hyp in r.get("hypotheses", []):
         print(f"  {hyp['id']} [{hyp['origin']}, {hyp['importance']}] {hyp['lean']}, {hyp['strength']} "
               f"({hyp['voices']} people) -> {hyp['priority']}")
@@ -403,6 +509,12 @@ def cmd_check_numbers(args: argparse.Namespace) -> int:
     return 1
 
 
+DEFAULTS = {  # crp sample's settings as the manifest records them: (flag, default)
+    "size": ("--size", thresholds.MEASUREMENT_SIZE), "person_cap": ("--person-cap", thresholds.PERSON_CAP),
+    "thread_cap_pct": ("--thread-cap-pct", thresholds.THREAD_CAP_PCT), "budget": ("--budget", thresholds.DETAIL_BUDGET),
+    "detail_per_person": ("--per-person", thresholds.DETAIL_PER_PERSON), "min_words": ("--min-words", thresholds.MIN_WORDS)}
+
+
 def stats_min() -> int:
     from crp.stats import MIN_MENTIONS
     return MIN_MENTIONS
@@ -424,6 +536,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--owner")
     p.add_argument("--root", default="studies", help="folder that holds the studies (default: studies)")
     p.set_defaults(func=cmd_new)
+
+    p = sub.add_parser("paste", help="turn a copied Reddit thread page into a capture file",
+                       description="Save a copied Reddit thread page as raw/<name>.txt and write its capture file.")
+    p.add_argument("study")
+    p.add_argument("file", help="the copied page as a .txt file, or - to read it from standard input")
+    p.add_argument("--name", help="file name for the paste (default: from the thread title)")
+    p.add_argument("--captured", help="YYYY-MM-DD the page was copied, for dates like '3d ago' (default: today)")
+    p.add_argument("--search-term", help="the search that found the thread (collection log)")
+    p.add_argument("--replace", action="store_true", help="replace an earlier paste of the same name (kept in raw/replaced/)")
+    p.set_defaults(func=cmd_paste)
 
     p = sub.add_parser("ingest", help="parse raw/ into raw/ingested.jsonl")
     p.add_argument("study", help="the study folder, e.g. studies/notion-teams")
@@ -465,6 +587,28 @@ def build_parser() -> argparse.ArgumentParser:
                    help=f"leave out comments shorter than this (default {thresholds.MIN_WORDS})")
     p.set_defaults(func=cmd_sample)
 
+    p = sub.add_parser("round", help="close this coded round and start the next, to add threads (D35)",
+                       description="Keep the current round in rounds/<n>/ and start the next. Needs locked labels.")
+    p.add_argument("study")
+    p.add_argument("--reason", required=True, help="why the new round starts, e.g. 'added three threads'")
+    p.set_defaults(func=cmd_round)
+
+    p = sub.add_parser("topup", help="add named posts to the detail selection, with a reason (D37)",
+                       description="Add forum posts to the detail selection before this round's batches exist.")
+    p.add_argument("study")
+    p.add_argument("post_ids", nargs="+", help="post ids, e.g. T03-p12")
+    p.add_argument("--reason", required=True, help="why, e.g. 'explain the sync driver'")
+    p.set_defaults(func=cmd_topup)
+
+    p = sub.add_parser("reset", help="start over from the sources: generated files move to archive/ (Steeve's call)")
+    p.add_argument("study")
+    p.add_argument("--yes", action="store_true", help="confirm: Steeve asked for the reset")
+    p.set_defaults(func=cmd_reset)
+
+    p = sub.add_parser("status", help="where the study is up to, stage by stage, and what comes next")
+    p.add_argument("study")
+    p.set_defaults(func=cmd_status)
+
     p = sub.add_parser("codebook", help="freeze the codebook")
     csub = p.add_subparsers(dest="action", required=True, metavar="action")
     q = csub.add_parser("freeze", help="check codebook.yaml and write codebook.lock")
@@ -478,6 +622,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("study")
     p.add_argument("--size", type=int, default=40, help="items per batch (default 40)")
     p.add_argument("--seed", type=int, help="seed for the item order (default: the sample's)")
+    p.add_argument("--no-reuse", action="store_true", help="code every item again, rather than reusing the last "
+                   "round's labels for items the coder would see unchanged")
     p.set_defaults(func=cmd_batch)
 
     p = sub.add_parser("labels", help="validate and lock the blind coder's labels")

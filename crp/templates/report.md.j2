@@ -199,6 +199,14 @@ Clustered {{ t.n_items }} {{ t.source }} with {{ t.method }} (silhouette {{ t.si
 
 {% endif %}
 {% endif %}
+{% if r.heard_enough %}{% set he = r.heard_enough %}
+## Have we heard enough?
+
+{{ vline("heard") }}
+
+Reading the {{ he.posts }} coded forum posts in {{ he.orders }} random orders turned up {{ he.topics }} topics (the AI's observation tags, less pattern tags such as workaround or trust). Over the last {{ he.last_posts }} {{ "post" if he.last_posts == 1 else "posts" }}, the average order found {{ he.last_new }} new {{ "topic" if he.last_new == 1 else "topics" }}. The dashboard draws the whole curve, with the middle {{ heard_band }}% of orders shaded. It shows whether reading kept turning up new things, not how common anything is.
+
+{% endif %}
 {% if r.hypotheses %}
 ## Hypotheses for discovery
 
@@ -231,4 +239,6 @@ Starting questions: {{ hy.next_step.questions|join(" / ") }}
 - Ranges come from {{ r.bootstrap_draws }} re-draws resampling people and threads, the wider shown. They describe this collection, not a wider population.
 - Forum posters are self-selected and skew towards people with strong feelings, often complaints. Treat findings as what an engaged, vocal group says, not what all users think.
 - People are counted, so one prolific poster counts once.
+{% if r.rounds %}{% set ro = r.rounds %}- This is round {{ ro.current }}: {{ ro.reason }}. Each round adds to the posts before it, so a change between rounds shows what the new material did, not a change over time.{% for e in ro.earlier %} Round {{ e.round }} ({{ e.reason }}): {% if e.n_items %}{{ e.n_items }} sampled comments from {{ e.n_people }} people in {{ e.n_threads }} threads{% if e.negative %}, {% if e.negative.status == "counts-only" %}{{ e.negative.k }} of {{ e.negative.n }} negative{% else %}{{ e.negative.pct }}% negative{% endif %}{% endif %}{% if e.top_driver %}, top driver {{ e.top_driver }}{% endif %}{% else %}not analysed{% endif %}.{% endfor %}{% if ro.change_pts is not none %} Since round {{ ro.earlier[-1].round }}, the negative share has moved {{ "%+g"|format(ro.change_pts) }} points.{% endif %}
+{% endif %}
 - Ethics: posts are public but written for a community, not for research. {{ "This version leaves out quotes, thread titles and person codes." if shareable else "This internal version quotes posts; share only the default build." }}

@@ -13,7 +13,7 @@ from crp.schemas import Codebook, Hypothesis, Insight, Job, Observation, Opportu
 ROOT = Path(__file__).resolve().parent.parent
 SKILL = ROOT / ".claude" / "skills" / "community-research"
 DOCS = [SKILL / "SKILL.md"] + sorted((SKILL / "reference").glob("*.md"))
-PLANNED = {"round", "paste", "status", "reset", "ui"}  # Phase 7b and 7c (D35, D36): named only as coming later
+PLANNED = {"ui"}  # Phase 7c (D36): named only as coming later
 COMMAND = re.compile(r"\bcrp ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?")
 
 

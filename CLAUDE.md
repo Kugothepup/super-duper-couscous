@@ -45,6 +45,7 @@ Current thresholds (from the skill, keep unless told otherwise):
 
 ```
 python -m crp --help
+python -m crp status studies/<id>
 pytest -q
 python -m crp analyse studies/<id>
 python -m crp check-numbers studies/<id>

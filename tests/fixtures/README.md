@@ -36,4 +36,4 @@
 | Transcription checks | T01: 9 exact and 1 normalised; T04: 7 unverified without OCR |
 | Measurement frame | 68 eligible forum posts: the promotional post and the echo reply are left out |
 | Thread cap | Only 4 threads, so the default 10% cap stops `crp sample` (D22); tests loosen it to 30% |
-| Coding (seed 11, 30% thread cap) | 28 measurement items in 1 batch, and 72 detail items (68 forum, 4 interview) in 2 batches: 100 in all |
+| Coding (seed 11, 30% thread cap) | 30 measurement items in 1 batch, and 72 detail items (68 forum, 4 interview) in 2 batches: 102 in all |

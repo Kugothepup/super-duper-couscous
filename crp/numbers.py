@@ -27,7 +27,7 @@ import yaml
 
 from crp import hypotheses, keyness, stats, thresholds, wording
 from crp.anonymise import POSTS
-from crp.analyse import RESULTS
+from crp.analyse import HEARD_BAND, RESULTS
 from crp.build import INTERNAL, OUT
 from crp.codebook import CODEBOOK
 from crp.io import InputError, read_jsonl
@@ -67,7 +67,8 @@ def constants(study_dir: Path) -> set[float]:
     """The method's stated constants, which templates may print as words around the data."""
     out = {thresholds.MIN_PEOPLE_FOR_RANGES, thresholds.MIN_ITEMS_FOR_FULL, thresholds.ALPHA_VERIFIED,
            thresholds.ALPHA_TENTATIVE, thresholds.THREAD_CAP_PCT, thresholds.PERSON_CAP, stats.MIN_MENTIONS,
-           stats.MIN_PER_SIDE, wording.GAP, hypotheses.LEAN_FOR, hypotheses.LEAN_AGAINST, keyness.Q, *SILHOUETTE_WORDS}
+           stats.MIN_PER_SIDE, wording.GAP, hypotheses.LEAN_FOR, hypotheses.LEAN_AGAINST, keyness.Q, *SILHOUETTE_WORDS,
+           HEARD_BAND}
     codebook = yaml.safe_load((study_dir / CODEBOOK).read_text(encoding="utf-8"))
     for v in codebook.get("variables", []):
         walk([x for x in v.get("values", []) if not isinstance(x, str)], out)
